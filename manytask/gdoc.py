@@ -75,6 +75,8 @@ class PublicAccountsSheetOptions:
     PERCENTAGE_COLUMN: int = 7
     TASK_SCORES_START_COLUMN: int = 14
 
+    COLUMNS_PER_TASK: int = 2
+
 
 class LoginNotFound(KeyError):
     pass
@@ -169,6 +171,15 @@ class RatingTable:
         if scores is None:
             scores = {}
         return scores
+    
+    def get_reviews(
+        self,
+        username: str,
+    ) -> dict[str, bool]:
+        reviews = self._cache.get(f"{self.ws.id}:{username}_reviews")
+        if reviews is None:
+            reviews = {}
+        return reviews
 
     def get_bonus_score(
         self,
@@ -249,7 +260,8 @@ class RatingTable:
         student: Student,
         task_name: str,
         update_fn: Callable[..., Any],
-    ) -> int:
+        review: bool,
+    ) -> tuple[int, str]:
         try:
             student_row = self._find_login_row(student.username)
         except LoginNotFound:
@@ -257,34 +269,64 @@ class RatingTable:
 
         task_column = self._find_task_column(task_name)
 
-        flags = self.ws.cell(student_row, PublicAccountsSheetOptions.FLAGS_COLUMN).value
         score_cell = self.ws.cell(student_row, task_column)
         old_score = int(score_cell.value) if score_cell.value else 0
-        new_score = update_fn(flags, old_score)
-        score_cell.value = new_score
-        logger.info(f"Setting score = {new_score}")
 
-        repo_link_cell = GCell(
-            student_row,
-            PublicAccountsSheetOptions.GITLAB_COLUMN,
-            self.create_student_repo_link(student),
-        )
-        self.ws.update_cells(
-            [repo_link_cell, score_cell],
-            value_input_option=ValueInputOption.user_entered,
-        )
+        review_cell = self.ws.cell(student_row, task_column)
+        old_review = review_cell.value if review_cell.value else ""
+
+        if not review:
+            flags = self.ws.cell(student_row, PublicAccountsSheetOptions.FLAGS_COLUMN).value
+            new_score = update_fn(flags, old_score)
+            new_review = old_review
+            score_cell.value = new_score
+            logger.info(f"Setting score = {new_score}")
+
+            repo_link_cell = GCell(
+                student_row,
+                PublicAccountsSheetOptions.GITLAB_COLUMN,
+                self.create_student_repo_link(student),
+            )
+            self.ws.update_cells(
+                [repo_link_cell, score_cell],
+                value_input_option=ValueInputOption.user_entered,
+            )
+        else:
+            new_score = old_score
+            new_review = self._format_review(old_review)
+            review_cell.value = new_review
+            logger.info(f"Setting review = {new_review}")
+
+            repo_link_cell = GCell(
+                student_row,
+                PublicAccountsSheetOptions.GITLAB_COLUMN,
+                self.create_student_repo_link(student),
+            )
+            self.ws.update_cells(
+                [repo_link_cell, review_cell],
+                value_input_option=ValueInputOption.user_entered,
+            )
 
         tasks = self._list_tasks(with_index=False)
         scores = self._get_row_values(
             student_row,
             start=PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1,
+            step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
             with_index=False,
         )
         student_scores = {task: score for task, score in zip(tasks, scores) if score or str(score) == "0"}
+        reviews = self._get_row_values(
+            student_row,
+            start=PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN,
+            step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
+            with_index=False,
+        )
+        student_reviews = {task: review.starts_with("+") for task, review in zip(tasks, reviews) if review}
         logger.info(f"Actual scores: {student_scores}")
 
         self._cache.set(f"{self.ws.id}:{student.username}", student_scores)
-        return new_score
+        self._cache.set(f"{self.ws.id}:{student.username}_reviews", student_reviews)
+        return new_score, new_review
 
     def sync_columns(
         self,
@@ -304,13 +346,14 @@ class RatingTable:
         current_worksheet_size = PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN + len(existing_tasks) - 1
         required_worksheet_size = current_worksheet_size
         if tasks_to_create:
-            required_worksheet_size = current_worksheet_size + len(tasks_to_create)
+            required_worksheet_size = current_worksheet_size + len(tasks_to_create) * PublicAccountsSheetOptions.COLUMNS_PER_TASK
 
             self.ws.resize(cols=required_worksheet_size)
 
             cells_to_update = []
             current_group = None
-            for col, task in enumerate(tasks_to_create, start=current_worksheet_size + 1):
+            for index, task in enumerate(tasks_to_create):
+                col = current_worksheet_size + 1 + PublicAccountsSheetOptions.COLUMNS_PER_TASK * index
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.HEADER_ROW, col, task.name))
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.MAX_SCORES_ROW, col, str(task.score)))
 
@@ -354,13 +397,15 @@ class RatingTable:
         self,
         row: int,
         start: int | None = None,
+        step: int | None = None,
         with_index: bool = False,
     ) -> Iterable[Any]:
         values: Iterable[Any] = self.ws.row_values(row, value_render_option=ValueRenderOption.unformatted)
         if with_index:
             values = enumerate(values, start=1)
         if start:
-            values = islice(values, start, None)
+            step = step if step else 1
+            values = islice(values, start, None, step)
         return values
 
     def _list_tasks(
@@ -370,6 +415,7 @@ class RatingTable:
         return self._get_row_values(
             PublicAccountsSheetOptions.HEADER_ROW,
             start=PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1,
+            step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
             with_index=with_index,
         )
 
@@ -416,14 +462,14 @@ class RatingTable:
             PublicAccountsSheetOptions.FLAGS_COLUMN: "",
             PublicAccountsSheetOptions.BONUS_COLUMN: "",
             PublicAccountsSheetOptions.TOTAL_COLUMN:
-            # total: sum(current row: from RATINGS_COLUMN to inf) + BONUS_COLUMN
-            f'=SUM(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN}) & ":" & ROW())) '
-            f"+ INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.BONUS_COLUMN}))",
+                # total: sum(current row: from RATINGS_COLUMN to inf) + BONUS_COLUMN
+                f'=SUM(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN}) & ":" & ROW())) '
+                f"+ INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.BONUS_COLUMN}))",
             PublicAccountsSheetOptions.PERCENTAGE_COLUMN:
-            # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
-            f"=IFERROR(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_COLUMN})) "
-            f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.HEADER_ROW - 1}; "
-            f"{PublicAccountsSheetOptions.TOTAL_COLUMN})); 0)",  # percentage
+                # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
+                f"=IFERROR(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_COLUMN})) "
+                f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.HEADER_ROW - 1}; "
+                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})); 0)",  # percentage
         }
 
         # fill empty columns with empty string
@@ -440,6 +486,10 @@ class RatingTable:
         updated_range_upper_bound = updated_range.split(":")[1]
         row_count, _ = a1_to_rowcol(updated_range_upper_bound)
         return row_count
+    
+    @staticmethod
+    def _format_review(old_value: str) -> str:
+        return "+"
 
     @staticmethod
     def create_student_repo_link(

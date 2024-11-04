@@ -65,6 +65,7 @@ def course_page() -> ResponseReturnValue:
 
     # get scores
     tasks_scores = rating_table.get_scores(student_username)
+    task_reviews = rating_table.get_reviews(student_username)
     tasks_stats = rating_table.get_stats()
 
     return render_template(
@@ -81,6 +82,7 @@ def course_page() -> ResponseReturnValue:
         manytask_version=course.manytask_version,
         links=course.config.ui.links or dict(),
         scores=tasks_scores,
+        reviews=task_reviews,
         bonus_score=rating_table.get_bonus_score(student_username),
         now=get_current_time(),
         task_stats=tasks_stats,

@@ -51,6 +51,10 @@
         background-color: #66cda3;
     }
 
+    .assignment.reviewed {
+        background-color: #66b5cd;
+    }
+
     .assignment.over_solved {
         background-color: #66cd83;
     }
@@ -166,12 +170,14 @@
                   {% set task_link = current_course.config.ui.task_url_template | replace('$GROUP_NAME', group.name) | replace('$TASK_NAME', task.name) %}
                 {% endif %}
 
-                {% if scores.get(task.name, 0) == task.score %}
+                {% if review.get(task.name, False) %}
+                    {% set task_tag = 'reviewed' %}
+                {% elif scores.get(task.name, 0) == task.score %}
                     {% set task_tag = 'solved' %}
-                {% elif scores.get(task.name, 0) > task.score %}
+                <!-- {% elif scores.get(task.name, 0) > task.score %}
                     {% set task_tag = 'over_solved' %}
                 {% elif scores.get(task.name, 0) > 0 %}
-                    {% set task_tag = 'solved_partially' %}
+                    {% set task_tag = 'solved_partially' %} -->
                 {% else %}
                     {% set task_tag = 'unsolved' %}
                 {% endif %}

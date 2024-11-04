@@ -167,6 +167,10 @@ def report_score() -> ResponseReturnValue:
                 reported_score = round(float(score_str) * task.score)
         except ValueError:
             return f"Cannot parse `score` <{reported_score}> to a number`", 400
+        
+    if "review" not in request.form:
+        return "You didn't provide whether this task is review", 400
+    review = request.form["review"] == "True"
 
     try:
         if username:
@@ -181,7 +185,7 @@ def report_score() -> ResponseReturnValue:
     submit_time = submit_time or course.deadlines.get_now_with_timezone()
     submit_time.replace(tzinfo=ZoneInfo(course.deadlines.timezone))
 
-    logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline}")
+    logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline} review {review}")
     logger.info(f"verify deadline: Use submit_time={submit_time}")
 
     if reported_score is None:
@@ -197,7 +201,7 @@ def report_score() -> ResponseReturnValue:
         submit_time=submit_time,
         check_deadline=check_deadline,
     )
-    final_score = course.rating_table.store_score(student, task.name, update_function)
+    final_score, review_status = course.rating_table.store_score(student, task.name, update_function, review)
 
     # save pushed files if sent
     with tempfile.TemporaryDirectory() as temp_folder_str:
@@ -213,6 +217,7 @@ def report_score() -> ResponseReturnValue:
         "username": student.username,
         "task": task.name,
         "score": final_score,
+        "review_status": review_status,
         "commit_time": submit_time.isoformat(sep=" ") if submit_time else "None",
         "submit_time": submit_time.isoformat(sep=" "),
     }, 200
