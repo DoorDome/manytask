@@ -479,7 +479,7 @@ class RatingTable:
             values=row_values,
             value_input_option=ValueInputOption.user_entered,  # don't escape link
             # note logical table to upend to (gdoc implicit split it to logical tables)
-            table_range=f"A{PublicAccountsSheetOptions.HEADER_ROW}",
+            table_range=f"A{PublicAccountsSheetOptions.HEADER_ROW + 1}",
         )
 
         updated_range = result["updates"]["updatedRange"]
