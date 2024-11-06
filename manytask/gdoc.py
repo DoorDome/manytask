@@ -260,7 +260,7 @@ class RatingTable:
         student: Student,
         task_name: str,
         update_fn: Callable[..., Any],
-        review: bool,
+        review: bool | None,
     ) -> tuple[int, str]:
         try:
             student_row = self._find_login_row(student.username)
@@ -275,7 +275,7 @@ class RatingTable:
         review_cell = self.ws.cell(student_row, task_column)
         old_review = review_cell.value if review_cell.value else ""
 
-        if not review:
+        if review is None:
             flags = self.ws.cell(student_row, PublicAccountsSheetOptions.FLAGS_COLUMN).value
             new_score = update_fn(flags, old_score)
             new_review = old_review
@@ -293,7 +293,7 @@ class RatingTable:
             )
         else:
             new_score = old_score
-            new_review = self._format_review(old_review)
+            new_review = self._format_review(old_review, review)
             review_cell.value = new_review
             logger.info(f"Setting review = {new_review}")
 
@@ -488,8 +488,12 @@ class RatingTable:
         return row_count
     
     @staticmethod
-    def _format_review(old_value: str) -> str:
-        return "+"
+    def _format_review(old_value: str, review_status: bool) -> str:
+        attempts = 0 if len(old_value) <= 1 else int(old_value[1:])
+        if review_status:
+            return f"+{attempts}"
+        else:
+            return f"-{attempts + 1}"
 
     @staticmethod
     def create_student_repo_link(
