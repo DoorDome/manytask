@@ -489,6 +489,7 @@ class RatingTable:
     
     @staticmethod
     def _format_review(old_value: str, review_status: bool) -> str:
+        logger.info(f"Braincell: {old_value}")
         assert old_value == "" or old_value[0] == "'"
         old_value = old_value.strip("'")
 
