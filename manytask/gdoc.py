@@ -272,7 +272,7 @@ class RatingTable:
         score_cell = self.ws.cell(student_row, task_column)
         old_score = int(score_cell.value) if score_cell.value else 0
 
-        review_cell = self.ws.cell(student_row, task_column)
+        review_cell = self.ws.cell(student_row, task_column + 1)
         old_review = review_cell.value if review_cell.value else ""
 
         if review is None:
@@ -491,7 +491,7 @@ class RatingTable:
     def _format_review(old_value: str, review_status: bool) -> str:
         attempts = 0 if len(old_value) <= 1 else int(old_value[1:])
         if review_status:
-            return f"+{attempts}"
+            return f"'+{attempts}" if attempts > 0 else "+"
         else:
             return f"-{attempts + 1}"
 

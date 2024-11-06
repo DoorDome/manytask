@@ -30,8 +30,7 @@ TESTER_TOKEN = os.environ["TESTER_TOKEN"]
 def requires_token(f: Callable[..., Any]) -> Callable[..., Any]:
     @functools.wraps(f)
     def decorated(*args: Any, **kwargs: Any) -> Any:
-        token = request.form.get(
-            "token", request.headers.get("Authorization", ""))
+        token = request.form.get("token", request.headers.get("Authorization", ""))
         if not token:
             abort(403)
         token = token.split()[-1]
@@ -62,14 +61,13 @@ def _parse_flags(flags: str | None) -> timedelta:
     right_colon = flags.find(":", left_colon + 1)
     if right_colon > -1 and left_colon > 0:
         parsed = None
-        date_string = flags[right_colon + 1:]
+        date_string = flags[right_colon + 1 :]
         try:
-            parsed = datetime.strptime(
-                date_string, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=DEFAULT_TIMEZONE)
+            parsed = datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=DEFAULT_TIMEZONE)
         except ValueError:
             logger.error(f"Could not parse date from flag {flags}")
         if parsed is not None and get_current_time() <= parsed:
-            days = int(flags[left_colon + 1: right_colon])
+            days = int(flags[left_colon + 1 : right_colon])
             extra_time = timedelta(days=days)
     return extra_time
 
@@ -91,8 +89,7 @@ def _update_score(
 
     extra_time = _parse_flags(flags)
 
-    multiplier = group.get_current_percent_multiplier(
-        now=submit_time - extra_time)
+    multiplier = group.get_current_percent_multiplier(now=submit_time - extra_time)
     new_score = int(score * multiplier)
 
     return max(old_score, new_score)
@@ -140,8 +137,7 @@ def report_score() -> ResponseReturnValue:
         submit_time_str = request.form["submit_time"]
     if submit_time_str:
         try:
-            submit_time = datetime.strptime(
-                submit_time_str, "%Y-%m-%d %H:%M:%S%z")
+            submit_time = datetime.strptime(submit_time_str, "%Y-%m-%d %H:%M:%S%z")
         except ValueError:
             submit_time = None
 
@@ -166,7 +162,7 @@ def report_score() -> ResponseReturnValue:
                 reported_score = 0
             elif float(score_str) > 2.0:
                 return f"Reported `score` <{reported_score}> is too large. " + \
-                    "Should be integer or float between 0.0 and 2.0.", 400
+                        "Should be integer or float between 0.0 and 2.0.", 400
             else:
                 reported_score = round(float(score_str) * task.score)
         except ValueError:
@@ -187,14 +183,12 @@ def report_score() -> ResponseReturnValue:
     submit_time = submit_time or course.deadlines.get_now_with_timezone()
     submit_time.replace(tzinfo=ZoneInfo(course.deadlines.timezone))
 
-    logger.info(f"Save score {reported_score} for @{student} on task {
-                task.name} check_deadline {check_deadline} review {review}")
+    logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline} review {review}")
     logger.info(f"verify deadline: Use submit_time={submit_time}")
 
     if reported_score is None:
         reported_score = task.score
-        logger.info(f"Got score=None; set max score for {
-                    task.name} of {task.score}")
+        logger.info(f"Got score=None; set max score for {task.name} of {task.score}")
     assert reported_score is not None
 
     update_function = functools.partial(
@@ -205,8 +199,7 @@ def report_score() -> ResponseReturnValue:
         submit_time=submit_time,
         check_deadline=check_deadline,
     )
-    final_score, review_status = course.rating_table.store_score(
-        student, task.name, update_function, review)
+    final_score, review_status = course.rating_table.store_score(student, task.name, update_function, review)
 
     # save pushed files if sent
     with tempfile.TemporaryDirectory() as temp_folder_str:
@@ -215,8 +208,7 @@ def report_score() -> ResponseReturnValue:
             assert file is not None and file.filename is not None
             secured_filename = secure_filename(file.filename)
             file.save(temp_folder_path / secured_filename)
-        course.solutions_api.store_task_from_folder(
-            task_name, student.username, temp_folder_path)
+        course.solutions_api.store_task_from_folder(task_name, student.username, temp_folder_path)
 
     return {
         "user_id": student.id,
@@ -254,8 +246,7 @@ def get_score() -> ResponseReturnValue:
         group, task = course.deadlines.find_task(task_name)
     except KeyError:
         return (
-            f"There is no task with name `{
-                task_name}` (or it is closed for submission)",
+            f"There is no task with name `{task_name}` (or it is closed for submission)",
             404,
         )
 
