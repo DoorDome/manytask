@@ -192,6 +192,39 @@ class GitLabApi:
         logger.info(f"Project {student.username} for group {self._course_students_group} does not exist")
         return False
 
+    def protect_branches(self, project):
+        try:
+             # protect branches from force push and merge without review
+            _ = project.protectedbranches.create({
+                'name': '*',  # All branches protection
+                'push_access_level': gitlab.const.AccessLevel.DEVELOPER,
+                'merge_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'allow_force_push': False,  
+            })
+            logger.info("Protected all branches")
+        except gitlab.GitlabCreateError:
+            logger.info("* branch lready exists")
+
+        try:
+            _ = project.protectedbranches.create({
+                'name': 'main',  # main branch protection
+                'push_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'merge_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'allow_force_push': False,
+            })
+            logger.info("Protected main branches")
+        except gitlab.GitlabCreateError:
+            logger.info("main branch lready exists")
+
+        try:
+            approval_settings = project.approvals.get()
+            approval_settings.approvals_before_merge = 1
+            approval_settings.save()
+            logger.info("Set approvals cnt")
+        except Exception:
+            logger.info("Error: set approvals")
+
+
     def create_project(
         self,
         student: Student,
@@ -210,6 +243,8 @@ class GitLabApi:
                 logger.info(f"Project {student.username} for group {self._course_students_group} already exists")
                 project = self._gitlab.projects.get(project.id)
 
+                self.protect_branches(project)
+                
                 # ensure student is a member of the project
                 try:
                     member = project.members.create(
@@ -252,6 +287,8 @@ class GitLabApi:
         # Unprotect all branches
         for protected_branch in project.protectedbranches.list(get_all=True):
             protected_branch.delete()
+
+        self.protect_branches(project)
         project.save()
 
         logger.info(f"Git project forked {course_public_project.path_with_namespace} -> {project.path_with_namespace}")
