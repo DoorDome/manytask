@@ -489,11 +489,19 @@ class RatingTable:
     
     @staticmethod
     def _format_review(old_value: str, review_status: bool) -> str:
-        attempts = 0 if len(old_value) <= 1 else int(old_value[1:])
+        assert old_value == "" or old_value[0] == "'"
+        old_value = old_value.strip("'")
+
+        if old_value == "+":
+            old_value += "1"
+        if old_value == "":
+            old_value = "0"
+        attempts = abs(int(old_value))
+
         if review_status:
             return f"'+{attempts}" if attempts > 0 else "'+"
         else:
-            return f"-{attempts + 1}"
+            return f"'-{attempts + 1}"
 
     @staticmethod
     def create_student_repo_link(
