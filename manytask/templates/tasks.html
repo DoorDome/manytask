@@ -170,7 +170,7 @@
                   {% set task_link = current_course.config.ui.task_url_template | replace('$GROUP_NAME', group.name) | replace('$TASK_NAME', task.name) %}
                 {% endif %}
 
-                {% if review.get(task.name, False) %}
+                {% if reviews.get(task.name, False) %}
                     {% set task_tag = 'reviewed' %}
                 {% elif scores.get(task.name, 0) == task.score %}
                     {% set task_tag = 'solved' %}
