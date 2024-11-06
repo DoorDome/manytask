@@ -491,7 +491,7 @@ class RatingTable:
     def _format_review(old_value: str, review_status: bool) -> str:
         attempts = 0 if len(old_value) <= 1 else int(old_value[1:])
         if review_status:
-            return f"'+{attempts}" if attempts > 0 else "+"
+            return f"'+{attempts}" if attempts > 0 else "'+"
         else:
             return f"-{attempts + 1}"
 
