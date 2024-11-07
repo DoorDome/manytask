@@ -293,7 +293,9 @@ class RatingTable:
             )
         else:
             new_score = old_score
+            logger.info(f"old {old_review}, review {review}")
             new_review = self._format_review(old_review, review)
+            logger.info(f"modified {new_review}")
             review_cell.value = new_review
             logger.info(f"Setting review = {new_review}")
 
@@ -489,11 +491,14 @@ class RatingTable:
     
     @staticmethod
     def _format_review(old_value: str, review_status: bool) -> str:
+        logger.info(f"initial {old_value}, review {review_status}")
         if old_value == "+":
             old_value += "1"
         if old_value == "":
             old_value = "0"
         attempts = abs(int(old_value))
+
+        logger.info(f"transformed {old_value}, review {review_status}, attempts {attempts}")
 
         if review_status:
             return f"'+{attempts}" if attempts > 0 else "'+"
