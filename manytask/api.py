@@ -168,7 +168,9 @@ def report_score() -> ResponseReturnValue:
         except ValueError:
             return f"Cannot parse `score` <{reported_score}> to a number`", 400
 
-    review = request.form.get("review")
+    review = None
+    if "review" in request.form:
+        review = request.form["review"] == "True"
 
     try:
         if username:
