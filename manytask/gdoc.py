@@ -317,6 +317,7 @@ class RatingTable:
             with_index=False,
         )
         student_scores = {task: score for task, score in zip(tasks, scores) if score or str(score) == "0"}
+
         reviews = self._get_row_values(
             student_row,
             start=PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN,
@@ -324,7 +325,11 @@ class RatingTable:
             with_index=False,
         )
         student_reviews = {task: review.starts_with("+") for task, review in zip(tasks, reviews) if review}
+
+        logger.info(f"Raw scores: {scores}")
+        logger.info(f"Raw reviews: {reviews}")
         logger.info(f"Actual scores: {student_scores}")
+        logger.info(f"Actual reviews: {student_reviews}")
 
         self._cache.set(f"{self.ws.id}:{student.username}", student_scores)
         self._cache.set(f"{self.ws.id}:{student.username}_reviews", student_reviews)
