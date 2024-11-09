@@ -328,8 +328,9 @@ class RatingTable:
 
         raw_scores = {task: score for (task, score) in zip(tasks, scores)}
         raw_reviews = {task: review for (task, review) in zip(tasks, reviews)}
-        logger.info(f"Raw scores: {raw_scores}")
-        logger.info(f"Raw reviews: {raw_reviews}")
+        logger.info(f"Tasks: {tasks}")
+        logger.info(f"Row: {student_row}")
+        logger.info(f"Raw values: {[v for v in self.ws.row_values(student_row, value_render_option=ValueRenderOption.unformatted)]}")
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
 
@@ -352,7 +353,7 @@ class RatingTable:
         existing_task_names = set(task for task in existing_tasks if task)
         tasks_to_create = [task for task in tasks if task.name not in existing_task_names]
 
-        current_worksheet_size = PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN + len(existing_tasks) - 1
+        current_worksheet_size = PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN + len(existing_tasks) * PublicAccountsSheetOptions.COLUMNS_PER_TASK - 1
         required_worksheet_size = current_worksheet_size
         if tasks_to_create:
             required_worksheet_size = current_worksheet_size + len(tasks_to_create) * PublicAccountsSheetOptions.COLUMNS_PER_TASK
