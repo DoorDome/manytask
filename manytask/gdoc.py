@@ -325,7 +325,7 @@ class RatingTable:
             step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
             with_index=False,
         )
-        student_reviews = {task: review.starts_with("+") for task, review in zip(tasks, reviews) if review}
+        student_reviews = {task: review.startswith("+") for task, review in zip(tasks, reviews) if review}
 
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
