@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import logging
 import re
 from collections import defaultdict
@@ -316,7 +317,7 @@ class RatingTable:
             step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
             with_index=False,
         )
-        student_scores = {task: score for task, score in zip(tasks, scores) if score or str(score) == "0"}
+        student_scores = {task: score for task, score in zip(deepcopy(tasks), scores) if score or str(score) == "0"}
 
         reviews = self._get_row_values(
             student_row,
@@ -326,9 +327,6 @@ class RatingTable:
         )
         student_reviews = {task: review.starts_with("+") for task, review in zip(tasks, reviews) if review}
 
-        logger.info(f"Tasks: {[t for t in tasks]}")
-        logger.info(f"Raw scores: {[s for s in scores]}")
-        logger.info(f"Raw reviews: {[r for r in reviews]}")
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
 

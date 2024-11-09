@@ -51,8 +51,12 @@
         background-color: #66cda3;
     }
 
-    .assignment.reviewed {
+    .assignment.accepted {
         background-color: #66b5cd;
+    }
+
+    .assignment.rejected {
+        background-color: #cdb566;
     }
 
     .assignment.over_solved {
@@ -170,8 +174,10 @@
                   {% set task_link = current_course.config.ui.task_url_template | replace('$GROUP_NAME', group.name) | replace('$TASK_NAME', task.name) %}
                 {% endif %}
 
-                {% if reviews.get(task.name, False) %}
-                    {% set task_tag = 'reviewed' %}
+                {% if reviews.get(task.name, None) == True %}
+                    {% set task_tag = 'accepted' %}
+                {% elif reviews.get(task.name, None) == False %}
+                    {% set task_tag = 'rejected' %}
                 {% elif scores.get(task.name, 0) == task.score %}
                     {% set task_tag = 'solved' %}
                 <!-- {% elif scores.get(task.name, 0) > task.score %}
