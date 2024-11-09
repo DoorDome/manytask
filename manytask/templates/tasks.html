@@ -48,11 +48,11 @@
     }
 
     .assignment.solved {
-        background-color: #66cda3;
+        background-color: #66b5cd;
     }
 
-    .assignment.accepted {
-        background-color: #66b5cd;
+    .assignment.approved {
+        background-color: #66cda3;
     }
 
     .assignment.rejected {
@@ -175,7 +175,7 @@
                 {% endif %}
 
                 {% if reviews.get(task.name, None) == True %}
-                    {% set task_tag = 'accepted' %}
+                    {% set task_tag = 'approved' %}
                 {% elif reviews.get(task.name, None) == False %}
                     {% set task_tag = 'rejected' %}
                 {% elif scores.get(task.name, 0) == task.score %}
