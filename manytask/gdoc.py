@@ -327,6 +327,8 @@ class RatingTable:
         student_reviews = {task: review.starts_with("+") for task, review in zip(tasks, reviews) if review}
 
         logger.info(f"Tasks: {[t for t in tasks]}")
+        logger.info(f"Raw scores: {[s for s in scores]}")
+        logger.info(f"Raw reviews: {[r for r in reviews]}")
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
 
