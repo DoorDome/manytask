@@ -218,6 +218,8 @@ class RatingTable:
             default_blank="",
             expected_headers=[],
         )
+        logger.debug(f"list_of_dicts: {list_of_dicts}")
+
         all_users_scores = {
             scores_dict["login"]: {
                 k: int(v)
@@ -226,6 +228,8 @@ class RatingTable:
             }
             for scores_dict in list_of_dicts
         }
+        logger.debug(f"all_users_scores: {all_users_scores}")
+        
         users_score_cache = {
             f"{self.ws.id}:{username}": scores_cache for username, scores_cache in all_users_scores.items()
         }
