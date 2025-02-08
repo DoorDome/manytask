@@ -171,6 +171,7 @@ class RatingTable:
         scores = self._cache.get(f"{self.ws.id}:{username}")
         if scores is None:
             scores = {}
+        logger.info(f"scores for {username}: {scores}")
         return scores
     
     def get_reviews(
@@ -180,6 +181,7 @@ class RatingTable:
         reviews = self._cache.get(f"{self.ws.id}:{username}_reviews")
         if reviews is None:
             reviews = {}
+        logger.info(f"reviews for {username}: {reviews}")
         return reviews
 
     def get_bonus_score(
