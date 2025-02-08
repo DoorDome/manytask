@@ -174,11 +174,11 @@
                   {% set task_link = current_course.config.ui.task_url_template | replace('$GROUP_NAME', group.name) | replace('$TASK_NAME', task.name) %}
                 {% endif %}
 
-                {% if reviews.get(task.name, None) == True %}
+                {% if reviews.get(task.name, "").startswith("+") %}
                     {% set task_tag = 'approved' %}
-                {% elif reviews.get(task.name, None) == False %}
+                {% elif reviews.get(task.name, "").startswith("-") %}
                     {% set task_tag = 'rejected' %}
-                {% elif scores.get(task.name, 0) == task.score %}
+                {% elif scores.get(task.name, 0) != 0 %}
                     {% set task_tag = 'solved' %}
                 <!-- {% elif scores.get(task.name, 0) > task.score %}
                     {% set task_tag = 'over_solved' %}
