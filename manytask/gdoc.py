@@ -74,7 +74,7 @@ class PublicAccountsSheetOptions:
     BONUS_COLUMN: int = 5
     TOTAL_COLUMN: int = 6
     PERCENTAGE_COLUMN: int = 7
-    TASK_SCORES_START_COLUMN: int = 14
+    TASK_SCORES_START_COLUMN: int = 10
 
     COLUMNS_PER_TASK: int = 2
 
@@ -209,33 +209,52 @@ class RatingTable:
             timestamp = "None"
         return timestamp
 
+    def _gather_worksheet_data(self) -> list:
+        raw_values = self.ws.get_values()
+        logger.info(f"raw_values: {raw_values}")
+        logger.info(f"raw_values len: {len(raw_values)}")
+        if len(raw_values) <= PublicAccountsSheetOptions.HEADER_ROW:
+            return list()
+
+        result = list()
+        header = raw_values[PublicAccountsSheetOptions.HEADER_ROW - 1]
+        logger.info(f"header: {header}")
+
+        for row in raw_values[PublicAccountsSheetOptions.HEADER_ROW:]:
+            user_data = {"params": dict(), "tasks": dict()}
+            # logger.info(f"user: {row[PublicAccountsSheetOptions.LOGIN_COLUMN - 1]}")
+            for index, value in enumerate(row[:PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1]):
+                user_data["params"][header[index]] = value
+            for index in range(PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1, len(row), PublicAccountsSheetOptions.COLUMNS_PER_TASK):
+                user_data["tasks"][header[index]] = tuple(row[index:index + PublicAccountsSheetOptions.COLUMNS_PER_TASK])
+            result.append(user_data)
+        return result
+
     def update_cached_scores(self) -> None:
         _current_timestamp = get_current_time()
 
-        list_of_dicts = self.ws.get_all_records(
-            empty2zero=False,
-            head=PublicAccountsSheetOptions.HEADER_ROW,
-            default_blank="",
-            expected_headers=[],
-        )
-        logger.debug(f"list_of_dicts: {list_of_dicts}")
+        processed_data = self._gather_worksheet_data()
+        logger.info(f"processed_data: {processed_data}")
 
         all_users_scores = {
-            scores_dict["login"]: {
-                k: int(v)
-                for i, (k, v) in enumerate(scores_dict.items())
-                if i >= PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1 and isinstance(v, int)
+            user_data["params"]["login"]: {
+                k: (int(v[0]),  v[1]) 
+                for k, v in user_data["tasks"].items()
+                if len(v[0]) > 0
             }
-            for scores_dict in list_of_dicts
+            for user_data in processed_data
         }
-        logger.debug(f"all_users_scores: {all_users_scores}")
+        logger.info(f"all_users_scores: {all_users_scores}")
         
         users_score_cache = {
-            f"{self.ws.id}:{username}": scores_cache for username, scores_cache in all_users_scores.items()
+            f"{self.ws.id}:{username}{suffix}": value 
+                for username, user_data in all_users_scores.items() 
+                for suffix, value in zip(("", "_review"), user_data)
         }
+        logger.info(f"{users_score_cache}: users_score_cache")
         all_users_bonus_scores = {
-            scores_dict["login"]: int(scores_dict["bonus"]) if scores_dict["bonus"] else 0
-            for scores_dict in list_of_dicts
+            user_data["params"]["login"]: int(user_data["params"]["bonus"]) if user_data["params"]["bonus"] else 0
+            for user_data in processed_data
         }
 
         # clear cache saving config
