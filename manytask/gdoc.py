@@ -254,7 +254,7 @@ class RatingTable:
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
-                k: (int(v[0]),  v[1]) 
+                k: (int(v[0]),  v[1] if len(v) > 1 else "") 
                 for k, v in user_data["tasks"].items()
                 if len(v[0]) > 0
             }

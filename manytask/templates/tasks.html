@@ -175,7 +175,11 @@
                 {% endif %}
 
                 {% if reviews.get(task.name, "").startswith("+") %}
-                    {% set task_tag = 'approved' %}
+                    {% if scores.get(task.name, 0) == task.score %}
+                        {% set task_tag = 'approved' %}
+                    {% else %}
+                        {% set task_tag = 'solved_partially' %}
+                    {% endif %}
                 {% elif reviews.get(task.name, "").startswith("-") %}
                     {% set task_tag = 'rejected' %}
                 {% elif scores.get(task.name, 0) != 0 %}
