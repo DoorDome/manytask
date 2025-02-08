@@ -168,21 +168,35 @@ class RatingTable:
         self,
         username: str,
     ) -> dict[str, int]:
-        scores = self._cache.get(f"{self.ws.id}:{username}")
+        scores = self._cache.get(f"{self.ws.id}:scores:{username}")
         if scores is None:
             scores = {}
         logger.info(f"scores for {username}: {scores}")
         return scores
     
+    def update_scores(
+        self,
+        username: str,
+        scores_data: dict[str, int],
+    ) -> None:
+        self._cache.set(f"{self.ws.id}:scores:{username}", scores_data)
+    
     def get_reviews(
         self,
         username: str,
     ) -> dict[str, bool]:
-        reviews = self._cache.get(f"{self.ws.id}:{username}_reviews")
+        reviews = self._cache.get(f"{self.ws.id}:reviews:{username}")
         if reviews is None:
             reviews = {}
         logger.info(f"reviews for {username}: {reviews}")
         return reviews
+    
+    def update_reviews(
+        self,
+        username: str,
+        reviews_data: dict[str, int],
+    ) -> None:
+        self._cache.set(f"{self.ws.id}:reviews:{username}", reviews_data)
 
     def get_bonus_score(
         self,
@@ -193,8 +207,8 @@ class RatingTable:
             return 0
         return bonus_scores.get(username, 0)
 
-    def get_all_scores(self) -> dict[str, dict[str, int]]:
-        all_scores = self._cache.get(f"{self.ws.id}:scores")
+    def get_all_scores_reviews(self) -> dict[str, dict[str, tuple[int, str]]]:
+        all_scores = self._cache.get(f"{self.ws.id}:scores_reviews")
         if all_scores is None:
             all_scores = {}
         return all_scores
@@ -238,7 +252,7 @@ class RatingTable:
         processed_data = self._gather_worksheet_data()
         logger.info(f"processed_data: {processed_data}")
 
-        all_users_scores = {
+        all_scores_and_reviews = {
             user_data["params"]["login"]: {
                 k: (int(v[0]),  v[1]) 
                 for k, v in user_data["tasks"].items()
@@ -246,12 +260,20 @@ class RatingTable:
             }
             for user_data in processed_data
         }
-        logger.info(f"all_users_scores: {all_users_scores}")
+        logger.info(f"all_scores_and_reviews: {all_scores_and_reviews}")
         
         users_score_cache = {
-            f"{self.ws.id}:{username}{suffix}": value 
-                for username, user_data in all_users_scores.items() 
-                for suffix, value in zip(("", "_review"), user_data)
+            f"{self.ws.id}:scores:{username}": {
+                task: data[0] 
+                for task, data in user_data.items()
+            }
+            for username, user_data in all_scores_and_reviews.items() 
+        } | {
+            f"{self.ws.id}:reviews:{username}": {
+                task: data[1] 
+                for task, data in user_data.items()
+            }
+            for username, user_data in all_scores_and_reviews.items() 
         }
         logger.info(f"{users_score_cache}: users_score_cache")
         all_users_bonus_scores = {
@@ -265,17 +287,17 @@ class RatingTable:
 
         # get all tasks stats
         _tasks_stats: defaultdict[str, int] = defaultdict(int)
-        for tasks in all_users_scores.values():
+        for tasks in all_scores_and_reviews.values():
             for task_name in tasks.keys():
                 _tasks_stats[task_name] += 1
         tasks_stats: dict[str, float] = {
-            task.name: (_tasks_stats[task.name] / len(all_users_scores) if len(all_users_scores) != 0 else 0)
+            task.name: (_tasks_stats[task.name] / len(all_scores_and_reviews) if len(all_scores_and_reviews) != 0 else 0)
             for task in config.get_tasks(enabled=True, started=True)
         }
 
         self._cache.clear()
         self._cache.set("__config__", _config)
-        self._cache.set(f"{self.ws.id}:scores", all_users_scores)
+        self._cache.set(f"{self.ws.id}:scores_reviews", all_scores_and_reviews)
         self._cache.set(f"{self.ws.id}:bonus", all_users_bonus_scores)
         self._cache.set(f"{self.ws.id}:stats", tasks_stats)
         self._cache.set(f"{self.ws.id}:update-timestamp", _current_timestamp)
@@ -355,8 +377,8 @@ class RatingTable:
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
 
-        self._cache.set(f"{self.ws.id}:{student.username}", student_scores)
-        self._cache.set(f"{self.ws.id}:{student.username}_reviews", student_reviews)
+        self.update_scores(student.username, student_scores)
+        self.update_reviews(student.username, student_reviews)
         return new_score, new_review
 
     def sync_columns(
