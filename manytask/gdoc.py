@@ -185,7 +185,7 @@ class RatingTable:
     def get_reviews(
         self,
         username: str,
-    ) -> dict[str, bool]:
+    ) -> dict[str, str]:
         reviews = self._cache.get(f"{self.ws.id}:reviews:{username}")
         if reviews is None:
             reviews = {}
