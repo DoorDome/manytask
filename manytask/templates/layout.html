@@ -5,7 +5,7 @@
 
 {% set solved_score = scores.values() | sum() %}
 {% set bonus_score_string = "+" ~ bonus_score if bonus_score > 0 else "" %}
-{% set solved_score_string = solved_score ~ " (" ~ approved_score ~ ")" ~ bonus_score_string %}
+{% set solved_score_string = solved_score ~ "(" ~ approved_score ~ ")" ~ bonus_score_string %}
 {% set solved_percent = (solved_score / current_course.deadlines.max_score_started * 100) | round(1, 'common') %}
 {% set approved_percent = (approved_score / current_course.deadlines.max_score_started * 100) | round(1, 'common') %}
 
