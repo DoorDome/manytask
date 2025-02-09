@@ -74,7 +74,8 @@ class PublicAccountsSheetOptions:
     BONUS_COLUMN: int = 5
     TOTAL_COLUMN: int = 6
     PERCENTAGE_COLUMN: int = 7
-    TASK_SCORES_START_COLUMN: int = 10
+    TOTAL_WITH_REVIEW_COLUMN: int = 8
+    TASK_SCORES_START_COLUMN: int = 14
 
     COLUMNS_PER_TASK: int = 2
 
@@ -508,6 +509,8 @@ class RatingTable:
         if len(student.name) == 0 or re.match(r"\W", student.name, flags=re.UNICODE):
             raise ValueError(f'Name "{student.name}" looks fishy')
 
+        TASKS_RANGE: str = f'INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN}) & ":" & ROW())'
+
         column_to_values_dict = {
             PublicAccountsSheetOptions.GITLAB_COLUMN: self.create_student_repo_link(student),
             PublicAccountsSheetOptions.LOGIN_COLUMN: student.username,
@@ -516,13 +519,20 @@ class RatingTable:
             PublicAccountsSheetOptions.BONUS_COLUMN: "",
             PublicAccountsSheetOptions.TOTAL_COLUMN:
                 # total: sum(current row: from RATINGS_COLUMN to inf) + BONUS_COLUMN
-                f'=SUM(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN}) & ":" & ROW())) '
-                f"+ INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.BONUS_COLUMN}))",
+                f'=SUM(ARRAYFORMULA(IF(MOD(COLUMN({TASKS_RANGE}), {PublicAccountsSheetOptions.COLUMNS_PER_TASK})=0, '
+                f'{TASKS_RANGE}, 0))) '
+                f'+ INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.BONUS_COLUMN}))',
             PublicAccountsSheetOptions.PERCENTAGE_COLUMN:
                 # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
                 f"=IFERROR(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_COLUMN})) "
                 f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.HEADER_ROW - 1}; "
                 f"{PublicAccountsSheetOptions.TOTAL_COLUMN})); 0)",  # percentage
+            PublicAccountsSheetOptions.TOTAL_WITH_REVIEW_COLUMN:
+                # total: sum(current row: from RATINGS_COLUMN to inf, multiply by 0 or 1 whether review is passed) + BONUS_COLUMN
+                f'=SUM(ARRAYFORMULA(IF(MOD(COLUMN({TASKS_RANGE}), {PublicAccountsSheetOptions.COLUMNS_PER_TASK})=0, '
+                f'{TASKS_RANGE} * '
+                f'(LEFT(INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN + 1}) & ":" & ROW()), 1)="+"), 0))) + '
+                f'INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.BONUS_COLUMN}))',
         }
 
         # fill empty columns with empty string
