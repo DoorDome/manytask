@@ -197,8 +197,8 @@ class GitLabApi:
              # protect branches from force push and merge without review
             _ = project.protectedbranches.create({
                 'name': 'submit/*',  # Submit branches protection for Developers
-                'push_access_level': gitlab.const.AccessLevel.DEVELOPER,
-                'merge_access_level': gitlab.const.AccessLevel.DEVELOPER,
+                'push_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'merge_access_level': gitlab.const.AccessLevel.MAINTAINER,
                 'allow_force_push': False,  
             })
             logger.info("Protected all branches")
@@ -214,7 +214,7 @@ class GitLabApi:
             })
             logger.info("Protected main branches")
         except gitlab.GitlabCreateError:
-            logger.info("main branch lready exists")
+            logger.info("main branch already exists")
 
         try:
             approval_settings = project.approvals.get()
