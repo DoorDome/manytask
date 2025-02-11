@@ -197,8 +197,8 @@ class GitLabApi:
              # protect branches from force push and merge without review
             _ = project.protectedbranches.create({
                 'name': 'submit/*',  # Submit branches protection for Developers
-                'push_access_level': gitlab.const.AccessLevel.MAINTAINER,
-                'merge_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'push_access_level': gitlab.const.AccessLevel.DEVELOPER,
+                'merge_access_level': gitlab.const.AccessLevel.DEVELOPER,
                 'allow_force_push': False,  
             })
             logger.info("Protected all branches")
@@ -208,8 +208,8 @@ class GitLabApi:
         try:
             _ = project.protectedbranches.create({
                 'name': 'main',  # main branch protection
-                'push_access_level': gitlab.const.AccessLevel.MAINTAINER,
-                'merge_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'push_access_level': gitlab.const.AccessLevel.DEVELOPER,
+                'merge_access_level': gitlab.const.AccessLevel.DEVELOPER,
                 'allow_force_push': False,
             })
             logger.info("Protected main branches")
