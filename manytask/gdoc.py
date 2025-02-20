@@ -172,7 +172,7 @@ class RatingTable:
         scores = self._cache.get(f"{self.ws.id}:scores:{username}")
         if scores is None:
             scores = {}
-        logger.info(f"scores for {username}: {scores}")
+        # logger.info(f"scores for {username}: {scores}")
         return scores
     
     def update_scores(
@@ -189,7 +189,7 @@ class RatingTable:
         reviews = self._cache.get(f"{self.ws.id}:reviews:{username}")
         if reviews is None:
             reviews = {}
-        logger.info(f"reviews for {username}: {reviews}")
+        # logger.info(f"reviews for {username}: {reviews}")
         return reviews
     
     def update_reviews(
@@ -228,14 +228,14 @@ class RatingTable:
 
     def _gather_worksheet_data(self) -> list:
         raw_values = self.ws.get_values()
-        logger.info(f"raw_values: {raw_values}")
-        logger.info(f"raw_values len: {len(raw_values)}")
+        # logger.info(f"raw_values: {raw_values}")
+        # logger.info(f"raw_values len: {len(raw_values)}")
         if len(raw_values) <= PublicAccountsSheetOptions.HEADER_ROW:
             return list()
 
         result = list()
         header = raw_values[PublicAccountsSheetOptions.HEADER_ROW - 1]
-        logger.info(f"header: {header}")
+        # logger.info(f"header: {header}")
 
         for row in raw_values[PublicAccountsSheetOptions.HEADER_ROW:]:
             user_data = {"params": dict(), "tasks": dict()}
@@ -251,7 +251,7 @@ class RatingTable:
         _current_timestamp = get_current_time()
 
         processed_data = self._gather_worksheet_data()
-        logger.info(f"processed_data: {processed_data}")
+        # logger.info(f"processed_data: {processed_data}")
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
@@ -261,7 +261,7 @@ class RatingTable:
             }
             for user_data in processed_data
         }
-        logger.info(f"all_scores_and_reviews: {all_scores_and_reviews}")
+        # logger.info(f"all_scores_and_reviews: {all_scores_and_reviews}")
         
         users_score_cache = {
             f"{self.ws.id}:scores:{username}": {
@@ -276,7 +276,7 @@ class RatingTable:
             }
             for username, user_data in all_scores_and_reviews.items() 
         }
-        logger.info(f"{users_score_cache}: users_score_cache")
+        # logger.info(f"{users_score_cache}: users_score_cache")
         all_users_bonus_scores = {
             user_data["params"]["login"]: int(user_data["params"]["bonus"]) if user_data["params"]["bonus"] else 0
             for user_data in processed_data
@@ -342,9 +342,9 @@ class RatingTable:
             )
         else:
             new_score = old_score
-            logger.info(f"old {old_review}, review {review}")
+            # logger.info(f"old {old_review}, review {review}")
             new_review = self._format_review(old_review, review)
-            logger.info(f"modified {new_review}")
+            # logger.info(f"modified {new_review}")
             review_cell.value = new_review
             logger.info(f"Setting review = {new_review}")
 
@@ -552,14 +552,14 @@ class RatingTable:
     
     @staticmethod
     def _format_review(old_value: str, review_status: bool) -> str:
-        logger.info(f"initial {old_value}, review {review_status}")
+        # logger.info(f"initial {old_value}, review {review_status}")
         if old_value == "+":
             old_value += "1"
         if old_value == "":
             old_value = "0"
         attempts = abs(int(old_value))
 
-        logger.info(f"transformed {old_value}, review {review_status}, attempts {attempts}")
+        # logger.info(f"transformed {old_value}, review {review_status}, attempts {attempts}")
 
         if review_status:
             return f"'+{attempts}" if attempts > 0 else "'+"
