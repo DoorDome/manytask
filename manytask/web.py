@@ -83,7 +83,7 @@ def course_page() -> ResponseReturnValue:
         links=course.config.ui.links or dict(),
         scores=tasks_scores,
         reviews=task_reviews,
-        approved_score=sum([score for task, score in tasks_scores.items() if task_reviews.get(task, "").startswith("+")]),
+        approved_score=sum([score for task, score in tasks_scores.items() if task_reviews.get(task, False)]),
         bonus_score=rating_table.get_bonus_score(student_username),
         now=get_current_time(),
         task_stats=tasks_stats,
