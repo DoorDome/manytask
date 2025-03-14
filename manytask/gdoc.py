@@ -189,7 +189,6 @@ class RatingTable:
         reviews = self._cache.get(f"{self.ws.id}:reviews:{username}")
         if reviews is None:
             reviews = {}
-        # logger.info(f"reviews for {username}: {reviews}")
         return reviews
     
     def update_reviews(
@@ -255,7 +254,7 @@ class RatingTable:
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
-                k: (int(v[0]),  v[1] if len(v) > 1 else "") 
+                k: (int(v[0]),  self._review_string_to_status(v[1] if len(v) > 1 else "")) 
                 for k, v in user_data["tasks"].items()
                 if len(v[0]) > 0
             }
@@ -330,33 +329,22 @@ class RatingTable:
             new_review = old_review
             score_cell.value = new_score
             logger.info(f"Setting score = {new_score}")
-
-            repo_link_cell = GCell(
-                student_row,
-                PublicAccountsSheetOptions.GITLAB_COLUMN,
-                self.create_student_repo_link(student),
-            )
-            self.ws.update_cells(
-                [repo_link_cell, score_cell],
-                value_input_option=ValueInputOption.user_entered,
-            )
         else:
             new_score = old_score
-            # logger.info(f"old {old_review}, review {review}")
-            new_review = self._format_review(old_review, review)
-            # logger.info(f"modified {new_review}")
-            review_cell.value = new_review
-            logger.info(f"Setting review = {new_review}")
 
-            repo_link_cell = GCell(
-                student_row,
-                PublicAccountsSheetOptions.GITLAB_COLUMN,
-                self.create_student_repo_link(student),
-            )
-            self.ws.update_cells(
-                [repo_link_cell, review_cell],
-                value_input_option=ValueInputOption.user_entered,
-            )
+        new_review = self._format_review(old_review, review)
+        review_cell.value = new_review
+        logger.info(f"Setting review = {new_review}")
+
+        repo_link_cell = GCell(
+            student_row,
+            PublicAccountsSheetOptions.GITLAB_COLUMN,
+            self.create_student_repo_link(student),
+        )
+        self.ws.update_cells(
+            [repo_link_cell, score_cell, review_cell],
+            value_input_option=ValueInputOption.user_entered,
+        )
 
         tasks = self._list_tasks(with_index=False)
         scores = self._get_row_values(
@@ -373,7 +361,9 @@ class RatingTable:
             step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
             with_index=False,
         )
-        student_reviews = {task: review.startswith("+") for task, review in zip(tasks, reviews) if review}
+        student_reviews = {task: self._review_string_to_status(review)
+                           for task, review in zip(tasks, reviews) 
+                           if self._review_string_to_status(review) is not None}
 
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
@@ -525,7 +515,7 @@ class RatingTable:
             PublicAccountsSheetOptions.PERCENTAGE_COLUMN:
                 # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
                 f"=IFERROR(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_COLUMN})) "
-                f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.HEADER_ROW - 1}; "
+                f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.GROUPS_ROW}; "
                 f"{PublicAccountsSheetOptions.TOTAL_COLUMN})); 0)",  # percentage
             PublicAccountsSheetOptions.TOTAL_WITH_REVIEW_COLUMN:
                 # total: sum(current row: from RATINGS_COLUMN to inf, multiply by 0 or 1 whether review is passed) + BONUS_COLUMN
@@ -551,20 +541,32 @@ class RatingTable:
         return row_count
     
     @staticmethod
-    def _format_review(old_value: str, review_status: bool) -> str:
+    def _format_review(old_value: str, review_status: bool | None) -> str:
         # logger.info(f"initial {old_value}, review {review_status}")
         if old_value == "+":
-            old_value += "1"
-        if old_value == "":
+            old_value = "+0"
+        elif old_value == "" or old_value == "?":
             old_value = "0"
-        attempts = abs(int(old_value))
+        elif old_value.startswith("?"):
+            old_value = old_value[1:]
+        bad_attempts = abs(int(old_value))
 
-        # logger.info(f"transformed {old_value}, review {review_status}, attempts {attempts}")
+        gen_trunkated_string = lambda att: (str(att) if att > 0 else "")
 
-        if review_status:
-            return f"'+{attempts}" if attempts > 0 else "'+"
+        if review_status is None:
+            if old_value.startswith("+"):
+                return "'+" + gen_trunkated_string(bad_attempts)
+            return "?" + gen_trunkated_string(bad_attempts)
+        elif review_status:
+            return "'+" + gen_trunkated_string(bad_attempts)
         else:
-            return f"'-{attempts + 1}"
+            return f"'-{bad_attempts + 1}"
+        
+    @staticmethod
+    def _review_string_to_status(review: str) -> bool | None:
+        if not review or review.startswith("?"):
+            return None
+        return review.startswith("+")
 
     @staticmethod
     def create_student_repo_link(
