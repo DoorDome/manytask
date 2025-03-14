@@ -174,13 +174,13 @@
                   {% set task_link = current_course.config.ui.task_url_template | replace('$GROUP_NAME', group.name) | replace('$TASK_NAME', task.name) %}
                 {% endif %}
 
-                {% if reviews.get(task.name, None) is True %}
+                {% if reviews.get(task.name, None) is true %}
                     {% if scores.get(task.name, 0) == task.score %}
                         {% set task_tag = 'approved' %}
                     {% else %}
                         {% set task_tag = 'solved_partially' %}
                     {% endif %}
-                {% elif reviews.get(task.name, None) is False %}
+                {% elif reviews.get(task.name, None) is false %}
                     {% set task_tag = 'rejected' %}
                 {% elif scores.get(task.name, 0) != 0 %}
                     {% set task_tag = 'solved' %}
