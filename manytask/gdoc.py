@@ -64,8 +64,8 @@ HEADER_ROW_FORMATTING = {
 @dataclass
 class PublicAccountsSheetOptions:
     GROUPS_ROW: int = 1
-    HEADER_ROW: int = 3
     MAX_SCORES_ROW: int = 2
+    HEADER_ROW: int = 3
 
     GITLAB_COLUMN: int = 1
     LOGIN_COLUMN: int = 2
@@ -517,7 +517,7 @@ class RatingTable:
                 # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
                 f"=IFERROR(ROUND(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_COLUMN})) "
                 f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.GROUPS_ROW}; "
-                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})), 2); 0)",  # percentage
+                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})), 4); 0) * 100",  # percentage
             PublicAccountsSheetOptions.TOTAL_WITH_REVIEW_COLUMN:
                 # total: sum(current row: from RATINGS_COLUMN to inf, multiply by 0 or 1 whether review is passed) + BONUS_COLUMN
                 f'=SUM(ARRAYFORMULA(IF(MOD(COLUMN({TASKS_RANGE}), {PublicAccountsSheetOptions.COLUMNS_PER_TASK})=0, '
@@ -528,7 +528,7 @@ class RatingTable:
                 # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
                 f"=IFERROR(ROUND(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_WITH_REVIEW_COLUMN})) "
                 f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.GROUPS_ROW}; "
-                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})), 2); 0)",  # percentage
+                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})), 4); 0) * 100",  # percentage
         }
 
         # fill empty columns with empty string
