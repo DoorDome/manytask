@@ -76,7 +76,7 @@ class PublicAccountsSheetOptions:
     PERCENTAGE_COLUMN: int = 7
     TOTAL_WITH_REVIEW_COLUMN: int = 8
     PERCENTAGE_WITH_REVIEW_COLUMN: int = 9
-    TASK_SCORES_START_COLUMN: int = 14
+    TASK_SCORES_START_COLUMN: int = 27
 
     COLUMNS_PER_TASK: int = 2
 
