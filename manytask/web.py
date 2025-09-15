@@ -151,6 +151,7 @@ def signup() -> ResponseReturnValue:
             course_name=course.name,
             course_favicon=course.favicon,
             manytask_version=course.manytask_version,
+            base_url=course.gitlab_api.base_url,
         )
 
     # ----  register a new user ---- #
@@ -163,12 +164,16 @@ def signup() -> ResponseReturnValue:
         email=request.form["email"].strip(),
         password=request.form["password"],
     )
+    logger.info(f"user: {user}")
 
     try:
         if not secrets.compare_digest(request.form["secret"], course.registration_secret):
+            logger.info("wrong secret")
             raise Exception("Invalid registration secret")
         if not secrets.compare_digest(request.form["password"], request.form["password2"]):
+            logger.info("wrong password")
             raise Exception("Passwords don't match")
+        logger.info("try register user")
         _ = course.gitlab_api.register_new_user(user)
     except Exception as e:
         logger.warning(f"User registration failed: {e}")
