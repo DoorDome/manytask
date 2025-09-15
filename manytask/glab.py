@@ -98,7 +98,7 @@ class GitLabApi:
             {
                 "email": user.email,
                 "username": user.username,
-                "name": user.surname + " " + user.firstname + " " + user.patronymic,
+                "name": user.surname + " " + user.firstname + ((" " + user.patronymic) if user.patronymic != "" else ""),
                 "external": False,
                 "password": user.password,
                 "skip_confirmation": True,
