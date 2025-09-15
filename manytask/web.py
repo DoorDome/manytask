@@ -159,7 +159,7 @@ def signup() -> ResponseReturnValue:
     user = glab.User(
         username=request.form["username"].strip(),
         firstname=request.form["firstname"].strip(),
-        surname=request.form["lastname"].strip(),
+        surname=request.form["surname"].strip(),
         patronymic=request.form["patronymic"].strip(),
         email=request.form["email"].strip(),
         password=request.form["password"],
