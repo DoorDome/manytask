@@ -160,20 +160,16 @@ def signup() -> ResponseReturnValue:
         username=request.form["username"].strip(),
         firstname=request.form["firstname"].strip(),
         surname=request.form["surname"].strip(),
-        patronymic=request.form["patronymic"].strip(),
+        patronymic=request.form.get("patronymic", "").strip(),
         email=request.form["email"].strip(),
         password=request.form["password"],
     )
-    logger.info(f"user: {user}")
 
     try:
         if not secrets.compare_digest(request.form["secret"], course.registration_secret):
-            logger.info("wrong secret")
             raise Exception("Invalid registration secret")
         if not secrets.compare_digest(request.form["password"], request.form["password2"]):
-            logger.info("wrong password")
             raise Exception("Passwords don't match")
-        logger.info("try register user")
         _ = course.gitlab_api.register_new_user(user)
     except Exception as e:
         logger.warning(f"User registration failed: {e}")

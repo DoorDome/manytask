@@ -195,35 +195,23 @@ class GitLabApi:
 
     def protect_branches(self, project):
         try:
-             # protect branches from force push and merge without review
-            _ = project.protectedbranches.create({
-                'name': 'submit/*',  # Submit branches protection for Developers
-                'push_access_level': gitlab.const.AccessLevel.DEVELOPER,
-                'merge_access_level': gitlab.const.AccessLevel.DEVELOPER,
-                'allow_force_push': False,  
-            })
-            logger.info("Protected all branches")
-        except gitlab.GitlabCreateError:
-            logger.info("* branch lready exists")
-
-        try:
             _ = project.protectedbranches.create({
                 'name': 'main',  # main branch protection
-                'push_access_level': gitlab.const.AccessLevel.DEVELOPER,
-                'merge_access_level': gitlab.const.AccessLevel.DEVELOPER,
+                'push_access_level': gitlab.const.AccessLevel.MAINTAINER,
+                'merge_access_level': gitlab.const.AccessLevel.MAINTAINER,
                 'allow_force_push': False,
             })
-            logger.info("Protected main branches")
+            logger.info("Protected branch 'main'")
         except gitlab.GitlabCreateError:
-            logger.info("main branch already exists")
+            logger.info("Branch 'main' is already protected")
 
         try:
             approval_settings = project.approvals.get()
             approval_settings.approvals_before_merge = 1
             approval_settings.save()
-            logger.info("Set approvals cnt")
-        except Exception:
-            logger.info("Error: set approvals")
+            logger.info("Set 'approvals_before_merge'")
+        except Exception as e:
+            logger.info("Error: cannot set 'approvals_before_merge'")
 
 
     def create_project(
@@ -256,7 +244,7 @@ class GitLabApi:
                     )
                     logger.info(f"Project exists, Access to fork granted for {member.username}")
                 except gitlab.GitlabCreateError:
-                    logger.info(f"Project exists, Access already granted for {student.username} or WTF")
+                    logger.info(f"Project exists, Access is already granted for {student.username}")
 
                 return
 
@@ -303,7 +291,7 @@ class GitLabApi:
             )
             logger.info(f"Access to fork granted for {member.username}")
         except gitlab.GitlabCreateError:
-            logger.info(f"Access already granted for {student.username} or smth happened")
+            logger.info(f"Access is already granted for {student.username} on new fork")
 
     def _check_is_course_admin(self, user_id: int) -> bool:
         try:
