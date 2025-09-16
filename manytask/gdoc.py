@@ -70,13 +70,7 @@ class PublicAccountsSheetOptions:
     GITLAB_COLUMN: int = 1
     LOGIN_COLUMN: int = 2
     NAME_COLUMN: int = 3
-    FLAGS_COLUMN: int = 4
-    BONUS_COLUMN: int = 5
-    TOTAL_COLUMN: int = 6
-    PERCENTAGE_COLUMN: int = 7
-    TOTAL_WITH_REVIEW_COLUMN: int = 8
-    PERCENTAGE_WITH_REVIEW_COLUMN: int = 9
-    TASK_SCORES_START_COLUMN: int = 27
+    TASK_SCORES_START_COLUMN: int = 4
 
     COLUMNS_PER_TASK: int = 3
 
@@ -325,8 +319,7 @@ class RatingTable:
         old_review = review_cell.value if review_cell.value else ""
 
         if review is None:
-            flags = self.ws.cell(student_row, PublicAccountsSheetOptions.FLAGS_COLUMN).value
-            new_score = update_fn(flags, old_score)
+            new_score = update_fn("", old_score)
             new_review = old_review
             score_cell.value = new_score
             logger.info(f"Setting score = {new_score}")
@@ -409,15 +402,6 @@ class RatingTable:
                     current_group = task_group_name
         else:
             cells_to_update = []
-
-        if max_score:
-            cells_to_update.append(
-                GCell(
-                    PublicAccountsSheetOptions.GROUPS_ROW,
-                    PublicAccountsSheetOptions.TOTAL_COLUMN,
-                    str(max_score),
-                )
-            )
 
         if cells_to_update:
             self.ws.update_cells(cells_to_update, value_input_option=ValueInputOption.user_entered)
@@ -506,29 +490,6 @@ class RatingTable:
             PublicAccountsSheetOptions.GITLAB_COLUMN: self.create_student_repo_link(student),
             PublicAccountsSheetOptions.LOGIN_COLUMN: student.username,
             PublicAccountsSheetOptions.NAME_COLUMN: student.name,
-            PublicAccountsSheetOptions.FLAGS_COLUMN: "",
-            PublicAccountsSheetOptions.BONUS_COLUMN: "",
-            PublicAccountsSheetOptions.TOTAL_COLUMN:
-                # total: sum(current row: from RATINGS_COLUMN to inf) + BONUS_COLUMN
-                f'=SUM(ARRAYFORMULA(IF(MOD(COLUMN({TASKS_RANGE}), {PublicAccountsSheetOptions.COLUMNS_PER_TASK})=0, '
-                f'{TASKS_RANGE}, 0))) '
-                f'+ INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.BONUS_COLUMN}))',
-            PublicAccountsSheetOptions.PERCENTAGE_COLUMN:
-                # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
-                f"=IFERROR(ROUND(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_COLUMN})) "
-                f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.GROUPS_ROW}; "
-                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})), 4); 0) * 100",  # percentage
-            PublicAccountsSheetOptions.TOTAL_WITH_REVIEW_COLUMN:
-                # total: sum(current row: from RATINGS_COLUMN to inf, multiply by 0 or 1 whether review is passed) + BONUS_COLUMN
-                f'=SUM(ARRAYFORMULA(IF(MOD(COLUMN({TASKS_RANGE}), {PublicAccountsSheetOptions.COLUMNS_PER_TASK})=0, '
-                f'{TASKS_RANGE} * '
-                f'(LEFT(INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN + 1}) & ":" & ROW()), 1)="+"), 0))) + '
-                f'INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.BONUS_COLUMN}))',
-            PublicAccountsSheetOptions.PERCENTAGE_WITH_REVIEW_COLUMN:
-                # percentage: TOTAL_COLUMN / max_score cell (1st row of TOTAL_COLUMN)
-                f"=IFERROR(ROUND(INDIRECT(ADDRESS(ROW(); {PublicAccountsSheetOptions.TOTAL_WITH_REVIEW_COLUMN})) "
-                f"/ INDIRECT(ADDRESS({PublicAccountsSheetOptions.GROUPS_ROW}; "
-                f"{PublicAccountsSheetOptions.TOTAL_COLUMN})), 4); 0) * 100",  # percentage
         }
 
         # fill empty columns with empty string
