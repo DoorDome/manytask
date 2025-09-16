@@ -148,7 +148,7 @@ class GitLabApi:
                 "name": self._course_public_repo,
                 "path": self._course_public_repo,
                 "namespace_id": group.id,
-                "visibility": "public",
+                "visibility": "private",
                 "shared_runners_enabled": True,
                 "auto_devops_enabled": False,
                 "initialize_with_readme": True,
@@ -271,6 +271,18 @@ class GitLabApi:
                 "auto_devops_enabled": False,
             }
         )
+
+        try:
+            member = course_public_project.members.create(
+                {
+                    "user_id": student.id,
+                    "access_level": gitlab.const.AccessLevel.GUEST,
+                }
+            )
+            logger.info(f"Access to public repository granted for {member.username}")
+        except gitlab.GitlabCreateError:
+            logger.info(f"Access is already granted for {student.username} on public repository")
+
         project = self._gitlab.projects.get(fork.id)
         # TODO: think .evn config value
         # Unprotect all branches
