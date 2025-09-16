@@ -272,7 +272,7 @@ class RatingTable:
         }
         # logger.info(f"{users_score_cache}: users_score_cache")
         all_users_bonus_scores = {
-            user_data["params"]["login"]: int(user_data["params"]["bonus"]) if user_data["params"]["bonus"] else 0
+            user_data["params"]["login"]: int(user_data["params"].get("bonus", "")) if user_data["params"].get("bonus", "") else 0
             for user_data in processed_data
         }
 
