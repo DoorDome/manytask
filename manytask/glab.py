@@ -233,11 +233,11 @@ class GitLabApi:
         self,
         student: Student,
     ) -> bool:
-        course_group = self._get_group_by_name(self._course_students_group)
+        course_group = self._get_group_by_name(self._course_group)
         try:
             member = course_group.members.get(student.id)
             return member._attrs["access_level"] == gitlab.const.AccessLevel.OWNER
-        except gitlab.GitlabCreateError:
+        except gitlab.GitlabGetError:
             logger.info(f"Cannot get user with id {student.id} from group {self._course_students_group}")
             return False
 
