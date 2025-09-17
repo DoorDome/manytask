@@ -168,10 +168,6 @@ def report_score() -> ResponseReturnValue:
         except ValueError:
             return f"Cannot parse `score` <{reported_score}> to a number`", 400
 
-    review = None
-    if "review" in request.form:
-        review = request.form["review"] == "True"
-
     try:
         if username:
             student = course.gitlab_api.get_student_by_username(username)
@@ -181,6 +177,12 @@ def report_score() -> ResponseReturnValue:
             assert False, "unreachable"
     except Exception:
         return f"There is no student with user_id {user_id} or username {username}", 404
+    
+    review = None
+    if "review" in request.form:
+        if not course.gitlab_api.is_admin(student):
+            return "You are not allowed to run review job", 403
+        review = request.form["review"] == "True"
 
     final_score = 0
     review_status = ""
