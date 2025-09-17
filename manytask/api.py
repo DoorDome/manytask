@@ -182,35 +182,40 @@ def report_score() -> ResponseReturnValue:
     except Exception:
         return f"There is no student with user_id {user_id} or username {username}", 404
 
-    submit_time = submit_time or course.deadlines.get_now_with_timezone()
-    submit_time.replace(tzinfo=ZoneInfo(course.deadlines.timezone))
+    final_score = 0
+    review_status = ""
+    if not course.gitlab_api.is_admin(student):
+        submit_time = submit_time or course.deadlines.get_now_with_timezone()
+        submit_time.replace(tzinfo=ZoneInfo(course.deadlines.timezone))
 
-    logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline} review {review}")
-    logger.info(f"verify deadline: Use submit_time={submit_time}")
+        logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline} review {review}")
+        logger.info(f"verify deadline: Use submit_time={submit_time}")
 
-    if reported_score is None:
-        reported_score = task.score
-        logger.info(f"Got score=None; set max score for {task.name} of {task.score}")
-    assert reported_score is not None
+        if reported_score is None:
+            reported_score = task.score
+            logger.info(f"Got score=None; set max score for {task.name} of {task.score}")
+        assert reported_score is not None
 
-    update_function = functools.partial(
-        _update_score,
-        group,
-        task,
-        reported_score,
-        submit_time=submit_time,
-        check_deadline=check_deadline,
-    )
-    final_score, review_status = course.rating_table.store_score(student, task.name, update_function, review)
+        update_function = functools.partial(
+            _update_score,
+            group,
+            task,
+            reported_score,
+            submit_time=submit_time,
+            check_deadline=check_deadline,
+        )
+        final_score, review_status = course.rating_table.store_score(student, task.name, update_function, review)
 
-    # save pushed files if sent
-    with tempfile.TemporaryDirectory() as temp_folder_str:
-        temp_folder_path = Path(temp_folder_str)
-        for file in files.values():
-            assert file is not None and file.filename is not None
-            secured_filename = secure_filename(file.filename)
-            file.save(temp_folder_path / secured_filename)
-        course.solutions_api.store_task_from_folder(task_name, student.username, temp_folder_path)
+        # save pushed files if sent
+        with tempfile.TemporaryDirectory() as temp_folder_str:
+            temp_folder_path = Path(temp_folder_str)
+            for file in files.values():
+                assert file is not None and file.filename is not None
+                secured_filename = secure_filename(file.filename)
+                file.save(temp_folder_path / secured_filename)
+            course.solutions_api.store_task_from_folder(task_name, student.username, temp_folder_path)
+    else:
+        logger.info(f"Admin ({student.username}) submission detected")
 
     return {
         "user_id": student.id,

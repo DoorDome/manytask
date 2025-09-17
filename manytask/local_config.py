@@ -8,6 +8,7 @@ from dataclasses import dataclass
 class LocalConfig:
     # tokens
     registration_secret: str
+    admin_registration_secret: str
     tester_token: str
 
     # utils
@@ -39,6 +40,7 @@ class LocalConfig:
         return cls(
             # tokens
             registration_secret=os.environ["REGISTRATION_SECRET"],
+            admin_registration_secret=os.environ["ADMIN_REGISTRATION_SECRET"],
             tester_token=os.environ["TESTER_TOKEN"],
             # utils
             cache_dir=os.environ["CACHE_DIR"],
@@ -68,6 +70,7 @@ class LocalConfig:
 class DebugLocalConfig(LocalConfig):
     # tokens
     registration_secret: str = "registration_secret"
+    admin_registration_secret: str = "admin_registration_secret"
     tester_token: str = "tester_token"
 
     # utils

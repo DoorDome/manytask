@@ -166,11 +166,12 @@ def signup() -> ResponseReturnValue:
     )
 
     try:
-        if not secrets.compare_digest(request.form["secret"], course.registration_secret):
+        if not secrets.compare_digest(request.form["secret"], course.registration_secret) and \
+            not secrets.compare_digest(request.form["secret"], course.admin_registration_secret):
             raise Exception("Invalid registration secret")
         if not secrets.compare_digest(request.form["password"], request.form["password2"]):
             raise Exception("Passwords don't match")
-        _ = course.gitlab_api.register_new_user(user)
+        _ = glab.map_gitlab_user_to_student(course.gitlab_api.register_new_user(user))   
     except Exception as e:
         logger.warning(f"User registration failed: {e}")
         return render_template(
@@ -180,7 +181,6 @@ def signup() -> ResponseReturnValue:
             course_favicon=course.favicon,
             base_url=course.gitlab_api.base_url,
         )
-
     return redirect(url_for("web.login"))
 
 
@@ -260,7 +260,8 @@ def create_project() -> ResponseReturnValue:
             manytask_version=course.manytask_version,
         )
 
-    if not secrets.compare_digest(request.form["secret"], course.registration_secret):
+    if not secrets.compare_digest(request.form["secret"], course.registration_secret) and \
+        not secrets.compare_digest(request.form["secret"], course.admin_registration_secret):
         logger.warning("Wrong registration secret when creating project")
         return render_template(
             "create_project.html",
@@ -272,6 +273,8 @@ def create_project() -> ResponseReturnValue:
 
     gitlab_access_token: str = session["gitlab"]["oauth_access_token"]
     student = course.gitlab_api.get_authenticated_student(gitlab_access_token)
+    if secrets.compare_digest(request.form["secret"], course.admin_registration_secret):
+        course.gitlab_api.make_admin(student)
 
     # Create use if needed
     try:

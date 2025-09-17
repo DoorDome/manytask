@@ -213,6 +213,34 @@ class GitLabApi:
         except Exception as e:
             logger.info("Error: cannot set 'approvals_before_merge'")
 
+    def make_admin(
+        self,
+        student: Student,
+    ) -> None:
+        course_group = self._get_group_by_name(self._course_group)
+        try:
+            member = course_group.members.create(
+                {
+                    "user_id": student.id,
+                    "access_level": gitlab.const.AccessLevel.OWNER,
+                }
+            )
+            logger.info(f"Admin access is granted to group {self._course_students_group} for user {member.username}")
+        except gitlab.GitlabCreateError:
+            logger.info(f"Admin access is already granted to group {self._course_students_group} for user {student.username}")
+
+    def is_admin(
+        self,
+        student: Student,
+    ) -> bool:
+        course_group = self._get_group_by_name(self._course_students_group)
+        try:
+            member = course_group.members.get(student.id)
+            return member._attrs["access_level"] == gitlab.const.AccessLevel.OWNER
+        except gitlab.GitlabCreateError:
+            logger.info(f"Cannot get user with id {student.id} from group {self._course_students_group}")
+            return False
+
 
     def create_project(
         self,
