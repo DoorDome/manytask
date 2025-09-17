@@ -304,7 +304,7 @@ class GitLabApi:
             member = course_public_project.members.create(
                 {
                     "user_id": student.id,
-                    "access_level": gitlab.const.AccessLevel.GUEST,
+                    "access_level": gitlab.const.AccessLevel.REPORTER,
                 }
             )
             logger.info(f"Access to public repository granted for {member.username}")
