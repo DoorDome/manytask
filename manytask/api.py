@@ -180,7 +180,9 @@ def report_score() -> ResponseReturnValue:
     
     review = None
     if "review" in request.form:
-        if not course.gitlab_api.is_admin(student):
+        job_username = request.form["reported_by"]
+        job_student = course.gitlab_api.get_student_by_username(job_username)
+        if not course.gitlab_api.is_admin(job_student):
             return "You are not allowed to run review job", 403
         review = request.form["review"] == "True"
 
