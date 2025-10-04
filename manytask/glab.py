@@ -222,7 +222,7 @@ class GitLabApi:
             member = course_group.members.create(
                 {
                     "user_id": student.id,
-                    "access_level": gitlab.const.AccessLevel.OWNER,
+                    "access_level": gitlab.const.AccessLevel.MAINTAINER,
                 }
             )
             logger.info(f"Admin access is granted to group {self._course_students_group} for user {member.username}")
@@ -236,7 +236,7 @@ class GitLabApi:
         course_group = self._get_group_by_name(self._course_group)
         try:
             member = course_group.members.get(student.id)
-            return member._attrs["access_level"] == gitlab.const.AccessLevel.OWNER
+            return member._attrs["access_level"] >= gitlab.const.AccessLevel.MAINTAINER
         except gitlab.GitlabGetError:
             logger.info(f"Cannot get user with id {student.id} from group {self._course_students_group}")
             return False
