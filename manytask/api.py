@@ -16,7 +16,7 @@ from flask.typing import ResponseReturnValue
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-from .config import ManytaskGroupConfig, ManytaskTaskConfig
+from .config import ManytaskGroupConfig, ManytaskTaskConfig, TaskReviewStatus
 from .course import DEFAULT_TIMEZONE, Course, get_current_time
 
 
@@ -178,17 +178,27 @@ def report_score() -> ResponseReturnValue:
     except Exception:
         return f"There is no student with user_id {user_id} or username {username}", 404
     
-    review = None
-    if "review" in request.form:
+    if "request_type" not in request.form:
+        return "You didn't provide attribute `request_type`", 400
+    
+    review = {"approve": "+", "reject": "-"}.get(request.form["request_type"], None)
+    merge_request_iid = request.form.get("merge_request_iid", None)
+    if review is None:
+        if merge_request_iid is None:
+            review = "~"
+        else:
+            review = "?"
+            course.rating_table.update_reviewers_list(course.gitlab_api.list_reviewers())
+    review = TaskReviewStatus.from_string(review)
+
+    if TaskReviewStatus.is_review_status(review):
         job_username = request.form["reported_by"]
         job_student = course.gitlab_api.get_student_by_username(job_username)
-        if not course.gitlab_api.is_admin(job_student):
+        if not course.gitlab_api.is_reviewer(job_student):
             return "You are not allowed to run review job", 403
-        review = request.form["review"] == "True"
 
-    final_score = 0
-    review_status = ""
-    if not course.gitlab_api.is_admin(student):
+    submission_status = course.rating_table.SubmissionStatus(0, "", "")
+    if not course.gitlab_api.is_reviewer(student):
         submit_time = submit_time or course.deadlines.get_now_with_timezone()
         submit_time.replace(tzinfo=ZoneInfo(course.deadlines.timezone))
 
@@ -208,7 +218,11 @@ def report_score() -> ResponseReturnValue:
             submit_time=submit_time,
             check_deadline=check_deadline,
         )
-        final_score, review_status = course.rating_table.store_score(student, task.name, update_function, review)
+        submission_status = course.rating_table.store_score(student, task.name, update_function, review)
+
+        if not (merge_request_iid is None) and not (submission_status.reviewer is None):
+            reviewer = course.gitlab_api.get_student_by_username(submission_status.reviewer)
+            course.gitlab_api.update_merge_request(student, merge_request_iid, reviewer)
 
         # save pushed files if sent
         with tempfile.TemporaryDirectory() as temp_folder_str:
@@ -225,8 +239,9 @@ def report_score() -> ResponseReturnValue:
         "user_id": student.id,
         "username": student.username,
         "task": task.name,
-        "score": final_score,
-        "review_status": review_status,
+        "score": submission_status.score,
+        "review_status": submission_status.review,
+        "reviewer": submission_status.reviewer,
         "commit_time": submit_time.isoformat(sep=" ") if submit_time else "None",
         "submit_time": submit_time.isoformat(sep=" "),
     }, 200

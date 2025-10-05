@@ -296,3 +296,39 @@ class ManytaskConfig(BaseModel):
         if data != 1:
             raise ValueError(f"Only version 1 is supported for {cls.__name__}")
         return data
+
+class TaskReviewStatus(Enum):
+    ACCEPTED = "+"
+    REJECTED = "-"
+    SOLVED = "~"
+    SOLVED_WITH_MR = "?"
+
+    @staticmethod
+    def is_review_status(status: TaskReviewStatus) -> bool:
+        return status in [TaskReviewStatus.ACCEPTED, TaskReviewStatus.REJECTED]
+    
+    @staticmethod
+    def from_string(string: str) -> TaskReviewStatus:
+        result = TaskReviewStatus._value2member_map_.get(string, None)
+        if result is None:
+            raise ValueError(f"Cannot convert string {string} to review status")
+        return result
+     
+class TaskReviewInfo: 
+    def __init__(self, status: TaskReviewStatus, bad_attempts: int):
+        self.status = status
+        self.bad_attempts = bad_attempts
+
+    @staticmethod
+    def from_string(string: str) -> TaskReviewInfo:
+        if len(string) == 0:
+            return TaskReviewInfo(TaskReviewStatus.SOLVED, 0)
+        
+        status = TaskReviewStatus.from_string(string[0])
+        try:
+            bad_attempts = int(string[1:])
+        except ValueError:
+            raise ValueError(f"Cannot convert string {string} to review info")
+
+        return TaskReviewInfo(status, bad_attempts)
+

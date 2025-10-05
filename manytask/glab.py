@@ -173,10 +173,10 @@ class GitLabApi:
             }
         )
 
-    def check_project_exists(
+    def get_project(
         self,
         student: Student,
-    ) -> bool:
+    ) -> gitlab.v4.objects.Project | None:
 
         gitlab_project_path = f"{self._course_students_group}/{student.username}"
         logger.info(f"Gitlab project path: {gitlab_project_path}")
@@ -188,10 +188,10 @@ class GitLabApi:
             # TODO: make global problem solve
             if project.path_with_namespace == gitlab_project_path:
                 logger.info(f"Project {student.username} for group {self._course_students_group} exists")
-                return True
+                return project
 
         logger.info(f"Project {student.username} for group {self._course_students_group} does not exist")
-        return False
+        return None
 
     def protect_branches(self, project):
         try:
@@ -213,7 +213,37 @@ class GitLabApi:
         except Exception as e:
             logger.info("Error: cannot set 'approvals_before_merge'")
 
-    def make_admin(
+    def update_merge_request(
+        self, 
+        student: Student,
+        merge_request_iid: int,
+        reviewer: Student,
+    ) -> None:
+        student_project = self.get_project(student)
+        if student_project is None:
+            return
+
+        try:
+            mr = student_project.mergerequests.get(id=merge_request_iid)
+        except gitlab.GitlabGetError:
+            logger.warning(f"Merge request with IID {merge_request_iid} for project '{self._course_students_group}/{student.username}'")
+            return
+        
+        mr.reviewer_ids = [reviewer.id]
+        mr.save()
+
+    def list_reviewers(
+        self
+    ) -> list[str]:
+        course_group = self._get_group_by_name(self._course_group)
+        reviewers = []
+        for member in course_group.members.list():
+            if member.access_level == gitlab.const.AccessLevel.MAINTAINER:
+                reviewers.append(member.username)
+        logger.info(f"Found reviewers: {reviewers}")
+        return reviewers
+
+    def make_reviewer(
         self,
         student: Student,
     ) -> None:
@@ -229,7 +259,7 @@ class GitLabApi:
         except gitlab.GitlabCreateError:
             logger.info(f"Admin access is already granted to group {self._course_students_group} for user {student.username}")
 
-    def is_admin(
+    def is_reviewer(
         self,
         student: Student,
     ) -> bool:

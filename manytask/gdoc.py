@@ -15,7 +15,7 @@ from google.auth.credentials import AnonymousCredentials
 from gspread import Cell as GCell
 from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol, rowcol_to_a1
 
-from .config import ManytaskConfig, ManytaskDeadlinesConfig
+from .config import ManytaskConfig, ManytaskDeadlinesConfig, TaskReviewStatus, TaskReviewInfo
 from .course import get_current_time
 from .glab import Student
 
@@ -152,6 +152,12 @@ class GoogleDocApi:
 
 
 class RatingTable:
+    class SubmissionStatus:
+        def __init__(self, score: int, review: str, reviewer: str | None):
+            self.score = score
+            self.review = review
+            self.reviewer = reviewer
+    
     def __init__(
         self,
         worksheet: gspread.Worksheet,
@@ -169,7 +175,34 @@ class RatingTable:
             scores = {}
         # logger.info(f"scores for {username}: {scores}")
         return scores
+
+    def update_reviewers_list(
+        self,
+        reviewers: list[str],
+    ) -> None:
+        counts = self.get_review_counts()
+        for reviewer in reviewers:
+            counts.setdefault(reviewer, 0)
+        self._cache.set(f"{self.ws.id}:review_counts", counts)
+
+    def add_review_count(
+        self,
+        reviewer: str,
+    ) -> None:
+        counts = self.get_review_counts()
+        count = counts.get(reviewer, 0)
+        counts[reviewer] = count + 1
+        self._cache.set(f"{self.ws.id}:review_counts", counts)
+        logger.info(f"Review counts: {counts}")
     
+    def get_review_counts(
+        self,
+    ) -> dict[str, int]:
+        counts = self._cache.get(f"{self.ws.id}:review_counts")
+        if counts is None:
+            counts = {}
+        return counts
+
     def update_scores(
         self,
         username: str,
@@ -180,16 +213,16 @@ class RatingTable:
     def get_reviews(
         self,
         username: str,
-    ) -> dict[str, str]:
+    ) -> dict[str, TaskReviewInfo]:
         reviews = self._cache.get(f"{self.ws.id}:reviews:{username}")
         if reviews is None:
             reviews = {}
         return reviews
-    
+
     def update_reviews(
         self,
         username: str,
-        reviews_data: dict[str, int],
+        reviews_data: dict[str, TaskReviewInfo],
     ) -> None:
         self._cache.set(f"{self.ws.id}:reviews:{username}", reviews_data)
 
@@ -249,7 +282,7 @@ class RatingTable:
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
-                k: (int(v[0]),  self._review_string_to_status(v[1] if len(v) > 1 else "")) 
+                k: (int(v[0]),  TaskReviewStatus.from_string(v[1] if len(v) > 1 else ""), v[2]) 
                 for k, v in user_data["tasks"].items()
                 if len(v[0]) > 0
             }
@@ -257,19 +290,19 @@ class RatingTable:
         }
         # logger.info(f"all_scores_and_reviews: {all_scores_and_reviews}")
         
-        users_score_cache = {
-            f"{self.ws.id}:scores:{username}": {
-                task: data[0] 
-                for task, data in user_data.items()
-            }
-            for username, user_data in all_scores_and_reviews.items() 
-        } | {
-            f"{self.ws.id}:reviews:{username}": {
-                task: data[1] 
-                for task, data in user_data.items()
-            }
-            for username, user_data in all_scores_and_reviews.items() 
-        }
+        review_counts = {}
+        users_score_cache = {}
+        for username, user_data in all_scores_and_reviews.items():
+            scores = {}
+            reviews = {}
+            for task, data in user_data.items():
+                scores[task] = data[0]
+                reviews[task] = data[1]
+                count = review_counts.get(data[2], 0)
+                review_counts[data[2]] = count + 1
+            users_score_cache[f"{self.ws.id}:scores:{username}"] = scores
+            users_score_cache[f"{self.ws.id}:reviews:{username}"] = reviews
+
         # logger.info(f"{users_score_cache}: users_score_cache")
         all_users_bonus_scores = {
             user_data["params"]["login"]: int(user_data["params"].get("bonus", "")) if user_data["params"].get("bonus", "") else 0
@@ -296,6 +329,7 @@ class RatingTable:
         self._cache.set(f"{self.ws.id}:bonus", all_users_bonus_scores)
         self._cache.set(f"{self.ws.id}:stats", tasks_stats)
         self._cache.set(f"{self.ws.id}:update-timestamp", _current_timestamp)
+        self._cache.set(f"{self.ws.id}:review_counts", review_counts)
         self._cache.set_many(users_score_cache)
 
     def store_score(
@@ -303,8 +337,8 @@ class RatingTable:
         student: Student,
         task_name: str,
         update_fn: Callable[..., Any],
-        review: bool | None,
-    ) -> tuple[int, str]:
+        review: TaskReviewStatus,
+    ) -> SubmissionStatus:
         try:
             student_row = self._find_login_row(student.username)
         except LoginNotFound:
@@ -316,9 +350,12 @@ class RatingTable:
         old_score = int(score_cell.value) if score_cell.value else 0
 
         review_cell = self.ws.cell(student_row, task_column + 1)
-        old_review = review_cell.value if review_cell.value else ""
+        old_review = TaskReviewInfo.from_string(review_cell.value if review_cell.value else "")
 
-        if review is None:
+        reviewer_cell = self.ws.cell(student_row, task_column + 2)
+        old_reviewer: str | None = reviewer_cell.value if reviewer_cell.value else None
+
+        if not TaskReviewStatus.is_review_status(review):
             new_score = update_fn("", old_score)
             new_review = old_review
             score_cell.value = new_score
@@ -330,13 +367,22 @@ class RatingTable:
         review_cell.value = new_review
         logger.info(f"Setting review = {new_review}")
 
+        new_reviewer = old_reviewer
+        if new_reviewer is None and review == TaskReviewStatus.SOLVED:
+            new_reviewer = self._get_reviewer()
+            if not (new_reviewer is None):
+                reviewer_cell.value = new_reviewer
+                logger.info(f"Setting reviewer = {new_reviewer}")
+            else:
+                logger.warning("No reviewers found")
+
         repo_link_cell = GCell(
             student_row,
             PublicAccountsSheetOptions.GITLAB_COLUMN,
             self.create_student_repo_link(student),
         )
         self.ws.update_cells(
-            [repo_link_cell, score_cell, review_cell],
+            [repo_link_cell, score_cell, review_cell, reviewer_cell],
             value_input_option=ValueInputOption.user_entered,
         )
 
@@ -355,16 +401,16 @@ class RatingTable:
             step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
             with_index=False,
         )
-        student_reviews = {task: self._review_string_to_status(review)
+        student_reviews = {task: TaskReviewInfo.from_string(review)
                            for task, review in zip(tasks, reviews) 
-                           if self._review_string_to_status(review) is not None}
+                           if review}
 
         logger.info(f"Actual scores: {student_scores}")
         logger.info(f"Actual reviews: {student_reviews}")
 
         self.update_scores(student.username, student_scores)
         self.update_reviews(student.username, student_reviews)
-        return new_score, new_review
+        return self.SubmissionStatus(new_score, new_review, new_reviewer)
 
     def sync_columns(
         self,
@@ -421,6 +467,18 @@ class RatingTable:
                 f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, required_worksheet_size)}",
                 HEADER_ROW_FORMATTING,
             )
+
+    def _get_reviewer(
+        self,
+    ) -> str | None:
+        counts = self.get_review_counts()
+        if len(counts) == 0:
+            return None
+        
+        ordered = sorted([(count, reviewer) for reviewer, count in counts.items()])
+        reviewer = ordered[0][1]
+        self.add_review_count(reviewer)
+        return reviewer
 
     def _get_row_values(
         self,
@@ -508,33 +566,22 @@ class RatingTable:
         return row_count
     
     @staticmethod
-    def _format_review(old_value: str, review_status: bool | None) -> str:
+    def _format_review(old_value: TaskReviewInfo, review_status: TaskReviewStatus) -> str:
         # logger.info(f"initial {old_value}, review {review_status}")
-        if old_value == "+":
-            old_value = "+0"
-        elif old_value == "" or old_value == "?":
-            old_value = "0"
-        elif old_value.startswith("?"):
-            old_value = old_value[1:]
-        bad_attempts = abs(int(old_value))
-
         gen_trunkated_string = lambda att: (str(att) if att > 0 else "")
+        bad_attempts = old_value.bad_attempts
 
-        if review_status is None:
-            if old_value.startswith("+"):
-                return "'+" + gen_trunkated_string(bad_attempts)
-            return "?" + gen_trunkated_string(bad_attempts)
-        elif review_status:
-            return "'+" + gen_trunkated_string(bad_attempts)
+        if not TaskReviewStatus.is_review_status(review_status):
+            if old_value.status == TaskReviewStatus.ACCEPTED:
+                return f"'{TaskReviewStatus.ACCEPTED.value}{gen_trunkated_string(bad_attempts)}"
+            return f"'{review_status}{gen_trunkated_string(bad_attempts)}"
+        elif review_status == TaskReviewStatus.ACCEPTED:
+            return f"'{TaskReviewStatus.ACCEPTED.value}{gen_trunkated_string(bad_attempts)}"
         else:
-            return f"'-{bad_attempts + 1}"
+            if not old_value.status == TaskReviewStatus.REJECTED:
+                bad_attempts += 1
+            return f"'{TaskReviewStatus.REJECTED}{bad_attempts}"
         
-    @staticmethod
-    def _review_string_to_status(review: str) -> bool | None:
-        if not review or review.startswith("?"):
-            return None
-        return review.startswith("+")
-
     @staticmethod
     def create_student_repo_link(
         student: Student,

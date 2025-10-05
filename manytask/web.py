@@ -11,6 +11,7 @@ from flask.typing import ResponseReturnValue
 
 from . import glab
 from .course import Course, get_current_time
+from .config import TaskReviewStatus
 
 
 SESSION_VERSION = 1.5
@@ -30,6 +31,14 @@ def valid_session(user_session: flask.sessions.SessionMixin) -> bool:
         and "repo" in user_session["gitlab"]
         and "course_admin" in user_session["gitlab"]
     )
+
+
+def format_review_status(status: TaskReviewStatus) -> bool | None:
+    if status == TaskReviewStatus.ACCEPTED:
+        return True
+    if status == TaskReviewStatus.REJECTED:
+        return False
+    return None
 
 
 @bp.route("/")
@@ -65,7 +74,7 @@ def course_page() -> ResponseReturnValue:
 
     # get scores
     tasks_scores = rating_table.get_scores(student_username)
-    task_reviews = rating_table.get_reviews(student_username)
+    task_reviews = {name: format_review_status(value.status) for name, value in rating_table.get_reviews(student_username).items()}
     tasks_stats = rating_table.get_stats()
 
     return render_template(
@@ -236,10 +245,10 @@ def login_finish() -> ResponseReturnValue:
     }
     session.permanent = True
 
-    if (course.gitlab_api.check_project_exists(student)):
-        return redirect(url_for("web.course_page"))
-    else :
+    if course.gitlab_api.get_project(student) is None:
         return redirect(url_for("web.create_project"))
+    else:
+        return redirect(url_for("web.course_page"))
 
 @bp.route("/create_project", methods=["GET", "POST"])
 def create_project() -> ResponseReturnValue:
@@ -274,7 +283,7 @@ def create_project() -> ResponseReturnValue:
     gitlab_access_token: str = session["gitlab"]["oauth_access_token"]
     student = course.gitlab_api.get_authenticated_student(gitlab_access_token)
     if secrets.compare_digest(request.form["secret"], course.admin_registration_secret):
-        course.gitlab_api.make_admin(student)
+        course.gitlab_api.make_reviewer(student)
 
     # Create use if needed
     try:
