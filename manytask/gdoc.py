@@ -574,13 +574,13 @@ class RatingTable:
         if not TaskReviewStatus.is_review_status(review_status):
             if old_value.status == TaskReviewStatus.ACCEPTED:
                 return f"'{TaskReviewStatus.ACCEPTED.value}{gen_trunkated_string(bad_attempts)}"
-            return f"'{review_status}{gen_trunkated_string(bad_attempts)}"
+            return f"'{review_status.value}{gen_trunkated_string(bad_attempts)}"
         elif review_status == TaskReviewStatus.ACCEPTED:
             return f"'{TaskReviewStatus.ACCEPTED.value}{gen_trunkated_string(bad_attempts)}"
         else:
             if not old_value.status == TaskReviewStatus.REJECTED:
                 bad_attempts += 1
-            return f"'{TaskReviewStatus.REJECTED}{bad_attempts}"
+            return f"'{TaskReviewStatus.REJECTED.value}{bad_attempts}"
         
     @staticmethod
     def create_student_repo_link(

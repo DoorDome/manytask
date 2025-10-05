@@ -326,7 +326,7 @@ class TaskReviewInfo:
         
         status = TaskReviewStatus.from_string(string[0])
         try:
-            bad_attempts = int(string[1:])
+            bad_attempts = int(string[1:]) if string[1:] else 0
         except ValueError:
             raise ValueError(f"Cannot convert string {string} to review info")
 
