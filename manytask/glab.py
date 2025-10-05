@@ -321,13 +321,10 @@ class GitLabApi:
                 # Enable shared runners
                 # TODO: Relay on groups runners
                 # "shared_runners_enabled": course_group.shared_runners_setting == "enabled",
-                # Set external gitlab-ci config from public repo
-                "ci_config_path": f".gitlab-ci.yml@{course_public_project.path_with_namespace}",
                 # Merge method to squash
                 "merge_method": "squash",
                 # Disable AutoDevOps
                 "auto_devops_enabled": False,
-                "merge_requests_enabled": True,
             }
         )
 
@@ -347,6 +344,10 @@ class GitLabApi:
         # Unprotect all branches
         for protected_branch in project.protectedbranches.list(get_all=True):
             protected_branch.delete()
+
+        # Set external gitlab-ci config from public repo
+        project.ci_config_path = f".gitlab-ci.yml@{course_public_project.path_with_namespace}"
+        project.merge_requests_enabled = True
 
         self.protect_branches(project)
         project.save()
