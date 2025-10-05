@@ -282,7 +282,7 @@ class RatingTable:
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
-                k: (int(v[0]),  TaskReviewInfo.from_string(v[1] if len(v) > 1 else ""), v[2]) 
+                k: (int(v[0]),  TaskReviewInfo.from_string(v[1] if len(v) > 1 else ""), v[2] if len(v) > 2 and v[2] else None) 
                 for k, v in user_data["tasks"].items()
                 if len(v[0]) > 0
             }
@@ -298,8 +298,9 @@ class RatingTable:
             for task, data in user_data.items():
                 scores[task] = data[0]
                 reviews[task] = data[1]
-                count = review_counts.get(data[2], 0)
-                review_counts[data[2]] = count + 1
+                if data[2]:
+                    count = review_counts.get(data[2], 0)
+                    review_counts[data[2]] = count + 1
             users_score_cache[f"{self.ws.id}:scores:{username}"] = scores
             users_score_cache[f"{self.ws.id}:reviews:{username}"] = reviews
 
