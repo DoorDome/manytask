@@ -327,6 +327,7 @@ class GitLabApi:
                 "merge_method": "squash",
                 # Disable AutoDevOps
                 "auto_devops_enabled": False,
+                "merge_requests_enabled": True,
             }
         )
 
