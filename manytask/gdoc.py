@@ -282,7 +282,7 @@ class RatingTable:
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
-                k: (int(v[0]),  TaskReviewStatus.from_string(v[1] if len(v) > 1 else ""), v[2]) 
+                k: (int(v[0]),  TaskReviewInfo.from_string(v[1] if len(v) > 1 else ""), v[2]) 
                 for k, v in user_data["tasks"].items()
                 if len(v[0]) > 0
             }
