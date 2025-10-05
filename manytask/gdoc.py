@@ -368,7 +368,7 @@ class RatingTable:
         logger.info(f"Setting review = {new_review}")
 
         new_reviewer = old_reviewer
-        if new_reviewer is None and review == TaskReviewStatus.SOLVED:
+        if new_reviewer is None and review == TaskReviewStatus.SOLVED_WITH_MR:
             new_reviewer = self._get_reviewer()
             if not (new_reviewer is None):
                 reviewer_cell.value = new_reviewer
