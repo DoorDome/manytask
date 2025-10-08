@@ -181,29 +181,34 @@ class RatingTable:
     def update_reviewers_list(
         self,
         reviewers: list[str],
+        check_order: bool = True,
     ) -> None:
-        counts = self.get_review_counts()
-        for reviewer in reviewers:
-            counts.setdefault(reviewer, 0)
-        self._cache.set(f"{self.ws.id}:review_counts", counts)
+        updated_reviewers = []
+        if check_order:
+            current_reviewers = self._get_reviewers_queue()
+            old_reviewers = [name for name in current_reviewers if not (name in reviewers)]
+            new_reviewers = [name for name in reviewers if not (name in current_reviewers)]
+            updated_reviewers = new_reviewers + old_reviewers
+        else:
+            updated_reviewers = reviewers
+        self._cache.set(f"{self.ws.id}:reviewers", updated_reviewers)
 
-    def add_review_count(
+    def pop_reviewer(
         self,
-        reviewer: str,
-    ) -> None:
-        counts = self.get_review_counts()
-        count = counts.get(reviewer, 0)
-        counts[reviewer] = count + 1
-        self._cache.set(f"{self.ws.id}:review_counts", counts)
-        logger.info(f"Review counts: {counts}")
+    ) -> str | None:
+        current_reviewers = self._get_reviewers_queue()
+        if not current_reviewers:
+            return None
+        reviewer = current_reviewers[0]
+        self.update_reviewers_list(current_reviewers[1:] + [reviewer], check_order=False)
     
-    def get_review_counts(
+    def _get_reviewers_queue(
         self,
-    ) -> dict[str, int]:
-        counts = self._cache.get(f"{self.ws.id}:review_counts")
-        if counts is None:
-            counts = {}
-        return counts
+    ) -> list[str]:
+        reviewers = self._cache.get(f"{self.ws.id}:reviewers")
+        if reviewers is None:
+            reviewers = []
+        return reviewers
 
     def update_scores(
         self,
@@ -292,7 +297,6 @@ class RatingTable:
         }
         # logger.info(f"all_scores_and_reviews: {all_scores_and_reviews}")
         
-        review_counts = {}
         users_score_cache = {}
         for username, user_data in all_scores_and_reviews.items():
             scores = {}
@@ -300,9 +304,6 @@ class RatingTable:
             for task, data in user_data.items():
                 scores[task] = data[0]
                 reviews[task] = data[1]
-                if data[2]:
-                    count = review_counts.get(data[2], 0)
-                    review_counts[data[2]] = count + 1
             users_score_cache[f"{self.ws.id}:scores:{username}"] = scores
             users_score_cache[f"{self.ws.id}:reviews:{username}"] = reviews
 
@@ -326,13 +327,15 @@ class RatingTable:
             for task in config.get_tasks(enabled=True, started=True)
         }
 
+        reviewers_order = self._cache.get(f"{self.ws.id}:reviewers")
+        
         self._cache.clear()
         self._cache.set("__config__", _config)
         self._cache.set(f"{self.ws.id}:scores_reviews", all_scores_and_reviews)
         self._cache.set(f"{self.ws.id}:bonus", all_users_bonus_scores)
         self._cache.set(f"{self.ws.id}:stats", tasks_stats)
         self._cache.set(f"{self.ws.id}:update-timestamp", _current_timestamp)
-        self._cache.set(f"{self.ws.id}:review_counts", review_counts)
+        self._cache.set(f"{self.ws.id}:reviewers", reviewers_order)
         self._cache.set_many(users_score_cache)
 
     def store_score(
@@ -372,7 +375,7 @@ class RatingTable:
 
         new_reviewer = old_reviewer
         if new_reviewer is None and review == TaskReviewStatus.SOLVED_WITH_MR:
-            new_reviewer = self._get_reviewer()
+            new_reviewer = self.pop_reviewer()
             if not (new_reviewer is None):
                 reviewer_cell.value = new_reviewer
                 logger.info(f"Setting reviewer = {new_reviewer}")
@@ -478,18 +481,6 @@ class RatingTable:
                 f"{rowcol_to_a1(PublicAccountsSheetOptions.SUBHEADER_ROW, required_worksheet_size)}",
                 HEADER_ROW_FORMATTING,
             )
-
-    def _get_reviewer(
-        self,
-    ) -> str | None:
-        counts = self.get_review_counts()
-        if len(counts) == 0:
-            return None
-        
-        ordered = sorted([(count, reviewer) for reviewer, count in counts.items()])
-        reviewer = ordered[0][1]
-        self.add_review_count(reviewer)
-        return reviewer
 
     def _get_row_values(
         self,
