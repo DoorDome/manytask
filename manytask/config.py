@@ -300,7 +300,7 @@ class ManytaskConfig(BaseModel):
 class TaskReviewStatus(Enum):
     ACCEPTED = "+"
     REJECTED = "-"
-    SOLVED = "~"
+    SOLVED = "#"
     SOLVED_WITH_MR = "?"
 
     @staticmethod
