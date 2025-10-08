@@ -243,7 +243,7 @@ class GitLabApi:
                 continue
             if member.access_level == gitlab.const.AccessLevel.MAINTAINER:
                 reviewers.append(member.username)
-        logger.info(f"Found reviewers: {reviewers}")
+        # logger.info(f"Found reviewers: {reviewers}")
         return reviewers
 
     def make_reviewer(

@@ -199,6 +199,7 @@ class RatingTable:
         current_reviewers = self._get_reviewers_queue()
         if not current_reviewers:
             return None
+        logger.info(f"Reviewers order = {current_reviewers}")
         reviewer = current_reviewers[0]
         self.update_reviewers_list(current_reviewers[1:] + [reviewer], check_order=False)
         return reviewer
