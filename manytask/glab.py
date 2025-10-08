@@ -229,6 +229,7 @@ class GitLabApi:
             logger.warning(f"Merge request with IID {merge_request_iid} for project '{self._course_students_group}/{student.username}'")
             return
         
+        mr.assignee_id = student.id
         mr.reviewer_ids = [reviewer.id]
         mr.save()
 
