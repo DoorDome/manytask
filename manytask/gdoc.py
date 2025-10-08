@@ -66,6 +66,8 @@ class PublicAccountsSheetOptions:
     GROUPS_ROW: int = 1
     MAX_SCORES_ROW: int = 2
     HEADER_ROW: int = 3
+    SUBHEADER_ROW: int = 4
+    STUDENTS_START_ROW: int = 5
 
     GITLAB_COLUMN: int = 1
     LOGIN_COLUMN: int = 2
@@ -257,14 +259,14 @@ class RatingTable:
         raw_values = self.ws.get_values()
         # logger.info(f"raw_values: {raw_values}")
         # logger.info(f"raw_values len: {len(raw_values)}")
-        if len(raw_values) <= PublicAccountsSheetOptions.HEADER_ROW:
+        if len(raw_values) < PublicAccountsSheetOptions.STUDENTS_START_ROW:
             return list()
 
         result = list()
         header = raw_values[PublicAccountsSheetOptions.HEADER_ROW - 1]
         # logger.info(f"header: {header}")
 
-        for row in raw_values[PublicAccountsSheetOptions.HEADER_ROW:]:
+        for row in raw_values[PublicAccountsSheetOptions.STUDENTS_START_ROW:]:
             user_data = {"params": dict(), "tasks": dict()}
             # logger.info(f"user: {row[PublicAccountsSheetOptions.LOGIN_COLUMN - 1]}")
             for index, value in enumerate(row[:PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1]):
@@ -440,6 +442,9 @@ class RatingTable:
             for index, task in enumerate(tasks_to_create):
                 col = current_worksheet_size + 1 + PublicAccountsSheetOptions.COLUMNS_PER_TASK * index
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.HEADER_ROW, col, task.name))
+                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col, "score"))
+                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 1, "status"))
+                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 2, "reviewer"))
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.MAX_SCORES_ROW, col, str(task.score)))
 
                 task_group_name = task_name_to_group_name[task.name]
@@ -459,13 +464,18 @@ class RatingTable:
                 GROUP_ROW_FORMATTING,
             )
             self.ws.format(
+                f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
+                f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, required_worksheet_size)}",
+                HEADER_ROW_FORMATTING,
+            )
+            self.ws.format(
                 f"{rowcol_to_a1(PublicAccountsSheetOptions.HEADER_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
                 f"{rowcol_to_a1(PublicAccountsSheetOptions.HEADER_ROW, required_worksheet_size)}",
                 HEADER_ROW_FORMATTING,
             )
             self.ws.format(
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, required_worksheet_size)}",
+                f"{rowcol_to_a1(PublicAccountsSheetOptions.SUBHEADER_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
+                f"{rowcol_to_a1(PublicAccountsSheetOptions.SUBHEADER_ROW, required_worksheet_size)}",
                 HEADER_ROW_FORMATTING,
             )
 
@@ -558,7 +568,7 @@ class RatingTable:
             values=row_values,
             value_input_option=ValueInputOption.user_entered,  # don't escape link
             # note logical table to upend to (gdoc implicit split it to logical tables)
-            table_range=f"A{PublicAccountsSheetOptions.HEADER_ROW + 1}",
+            table_range=f"A{PublicAccountsSheetOptions.STUDENTS_START_ROW}",
         )
 
         updated_range = result["updates"]["updatedRange"]
