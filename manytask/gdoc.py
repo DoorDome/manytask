@@ -186,9 +186,9 @@ class RatingTable:
         updated_reviewers = []
         if check_order:
             current_reviewers = self._get_reviewers_queue()
-            old_reviewers = [name for name in current_reviewers if not (name in reviewers)]
+            preserved_reviewers = [name for name in current_reviewers if name in reviewers]
             new_reviewers = [name for name in reviewers if not (name in current_reviewers)]
-            updated_reviewers = new_reviewers + old_reviewers
+            updated_reviewers = new_reviewers + preserved_reviewers
         else:
             updated_reviewers = reviewers
         self._cache.set(f"{self.ws.id}:reviewers", updated_reviewers)
@@ -201,6 +201,7 @@ class RatingTable:
             return None
         reviewer = current_reviewers[0]
         self.update_reviewers_list(current_reviewers[1:] + [reviewer], check_order=False)
+        return reviewer
     
     def _get_reviewers_queue(
         self,
@@ -328,7 +329,7 @@ class RatingTable:
         }
 
         reviewers_order = self._cache.get(f"{self.ws.id}:reviewers")
-        
+
         self._cache.clear()
         self._cache.set("__config__", _config)
         self._cache.set(f"{self.ws.id}:scores_reviews", all_scores_and_reviews)
