@@ -181,15 +181,14 @@ def report_score() -> ResponseReturnValue:
     if "request_type" not in request.form:
         return "You didn't provide attribute `request_type`", 400
     
-    review = {"approve": "+", "reject": "-"}.get(request.form["request_type"], None)
+    review = {"approve": TaskReviewStatus.ACCEPTED, "reject": TaskReviewStatus.REJECTED}.get(request.form["request_type"], None)
     merge_request_iid = request.form.get("merge_request_iid", None)
     if review is None:
         if merge_request_iid is None:
-            review = "~"
+            review = TaskReviewStatus.SOLVED
         else:
-            review = "?"
+            review = TaskReviewStatus.SOLVED_WITH_MR
             course.rating_table.update_reviewers_list(course.gitlab_api.list_reviewers())
-    review = TaskReviewStatus.from_string(review)
 
     if TaskReviewStatus.is_review_status(review):
         job_username = request.form["reported_by"]
