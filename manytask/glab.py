@@ -239,6 +239,8 @@ class GitLabApi:
         course_group = self._get_group_by_name(self._course_group)
         reviewers = []
         for member in course_group.members.list(iterator=True):
+            if "_bot_" in member.username:
+                continue
             if member.access_level == gitlab.const.AccessLevel.MAINTAINER:
                 reviewers.append(member.username)
         logger.info(f"Found reviewers: {reviewers}")
