@@ -244,7 +244,7 @@ class RatingTable:
             return 0
         return bonus_scores.get(username, 0)
 
-    def get_all_scores_reviews(self) -> dict[str, dict[str, tuple[int, str]]]:
+    def get_all_scores_reviews(self) -> dict[str, dict[str, tuple[int, TaskReviewInfo, str | None]]]:
         all_scores = self._cache.get(f"{self.ws.id}:scores_reviews")
         if all_scores is None:
             all_scores = {}

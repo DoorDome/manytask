@@ -333,6 +333,15 @@ def update_cache() -> ResponseReturnValue:
     # ----- logic ----- #
     course.rating_table.update_cached_scores()
 
+    for student, student_tasks in course.rating_table.get_all_scores_reviews().items():
+        student = course.gitlab_api.get_student_by_username(student)
+        for task, (score, review, reviewer) in student_tasks.items():
+            if reviewer is None:
+                continue
+            reviewer = course.gitlab_api.get_student_by_username(reviewer)
+
+            course.gitlab_api.update_all_merge_requests(student, f"submit/{task}", reviewer)
+
     return "", 200
 
 

@@ -225,13 +225,45 @@ class GitLabApi:
 
         try:
             mr = student_project.mergerequests.get(id=merge_request_iid)
-        except gitlab.GitlabGetError:
-            logger.warning(f"Merge request with IID {merge_request_iid} for project '{self._course_students_group}/{student.username}'")
+        except gitlab.GitlabGetError as e:
+            logger.warning(f"Merge request with IID {merge_request_iid} for project '{self._course_students_group}/{student.username}' not found: {e}")
             return
         
-        mr.assignee_id = student.id
-        mr.reviewer_ids = [reviewer.id]
-        mr.save()
+        self.__update_merge_request(student, mr, reviewer)
+
+    def update_all_merge_requests(
+        self, 
+        student: Student,
+        merge_request_source_branch: str,
+        reviewer: Student,
+    ) -> None:
+        student_project = self.get_project(student)
+        if student_project is None:
+            return
+
+        merge_request_params = {
+            'source_branch': merge_request_source_branch,
+            'target_branch': 'main',
+        }
+
+        try:
+            mr_list = student_project.mergerequests.list(iterator=True, **merge_request_params)
+        except gitlab.GitlabListError as e:
+            logger.warning(f"Cannot list merge requests with params {merge_request_params} for project '{self._course_students_group}/{student.username}': {e}")
+            return
+        
+        for mr in mr_list:
+            self.__update_merge_request(student, mr, reviewer)
+
+    def __update_merge_request(
+        self,
+        student: Student,
+        merge_request: gitlab.v4.objects.ProjectMergeRequest,
+        reviewer: Student,
+    ) -> None:
+        merge_request.assignee_id = student.id
+        merge_request.reviewer_ids = [reviewer.id]
+        merge_request.save()
 
     def list_reviewers(
         self
