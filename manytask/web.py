@@ -75,6 +75,7 @@ def course_page() -> ResponseReturnValue:
     # get scores
     tasks_scores = rating_table.get_scores(student_username)
     task_reviews = {name: format_review_status(value.status) for name, value in rating_table.get_reviews(student_username).items()}
+    task_merge_requests = dict()
     tasks_stats = rating_table.get_stats()
 
     return render_template(
@@ -92,6 +93,7 @@ def course_page() -> ResponseReturnValue:
         links=course.config.ui.links or dict(),
         scores=tasks_scores,
         reviews=task_reviews,
+        merge_requests=task_merge_requests,
         approved_score=sum([score for task, score in tasks_scores.items() if task_reviews.get(task, False)]),
         bonus_score=rating_table.get_bonus_score(student_username),
         now=get_current_time(),

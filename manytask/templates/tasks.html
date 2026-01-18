@@ -51,6 +51,10 @@
         background-color: #cdb566;
     }
 
+    .assignment.solved_with_mr {
+        background-color: #669fcd;
+    }
+
     .assignment.approved {
         background-color: #66cda3;
     }
@@ -63,9 +67,10 @@
         background-color: #66cd83;
     }
 
-    .assignment.solved_partially {
-        background-color: #857fdc;
+    .assignment.banned {
+        background-color: #d97fdc;
     }
+
     .assignment.special {
         border: 2px solid #f0ad4e!important;
     }
@@ -174,18 +179,18 @@
                   {% set task_link = current_course.config.ui.task_url_template | replace('$STUDENT', username) | replace('$GROUP_NAME', group.name) | replace('$TASK_NAME', task.name) %}
                 {% endif %}
 
-                {% if reviews.get(task.name, None) is true %}
-                    {% if scores.get(task.name, 0) == task.score %}
-                        {% set task_tag = 'approved' %}
-                    {% else %}
-                        {% set task_tag = 'solved_partially' %}
-                    {% endif %}
+                {% if scores.get(task.name) is none %}
+                    {% set task_tag = 'unsolved' %}
+                {% elif scores.get(task.name) <= 0 %}
+                    {% set task_tag = 'banned' %}
+                {% elif reviews.get(task.name, None) is true %}
+                    {% set task_tag = 'approved' %}
                 {% elif reviews.get(task.name, None) is false %}
                     {% set task_tag = 'rejected' %}
-                {% elif scores.get(task.name, 0) != 0 %}
+                {% elif merge_requests.get(task.name) is none %}
                     {% set task_tag = 'solved' %}
                 {% else %}
-                    {% set task_tag = 'unsolved' %}
+                    {% set task_tag = 'solved_with_mr' %}
                 {% endif %}
 
                 {% if task.is_special %}
