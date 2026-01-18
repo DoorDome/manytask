@@ -355,7 +355,7 @@ class RatingTable:
         task_column = self._find_task_column(task_name)
 
         score_cell = self.ws.cell(student_row, task_column)
-        old_score = int(score_cell.value) if score_cell.value else 0
+        old_score: int | None = int(score_cell.value) if score_cell.value else None
 
         review_cell = self.ws.cell(student_row, task_column + 1)
         old_review = TaskReviewInfo.from_string(review_cell.value if review_cell.value else "")
@@ -363,13 +363,13 @@ class RatingTable:
         reviewer_cell = self.ws.cell(student_row, task_column + 2)
         old_reviewer: str | None = reviewer_cell.value if reviewer_cell.value else None
 
-        if not TaskReviewStatus.is_review_status(review):
+        if not TaskReviewStatus.is_review_status(review) and old_score is None:
             new_score = update_fn("", old_score)
             new_review = old_review
             score_cell.value = new_score
             logger.info(f"Setting score = {new_score}")
         else:
-            new_score = old_score
+            new_score = old_score if old_score else 0
 
         new_review = self._format_review(old_review, review)
         review_cell.value = new_review
