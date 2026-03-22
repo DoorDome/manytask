@@ -100,12 +100,10 @@ class ManytaskGroupConfig(BaseModel):
                 x=(now - start).total_seconds(),
             )
 
-        # manytask : None if now is before start, ok if last_point[1] is zero
-        # manytask : return (last_point and last_point[1]) or -14.88
-        # i do not undertand when -14.88 case can be triggered, unless start is set incorrectly
+        # in manytask they return 0
         if last_point:
             return last_point[1]
-        return -14.88
+        raise RuntimeError("get_current_percent_multiplier reached unreachable")
 
     def replace_timezone(self, timezone: ZoneInfo) -> None:
         self.start = self.start.replace(tzinfo=timezone)
