@@ -138,6 +138,9 @@ def report_score() -> ResponseReturnValue:
             submit_time = None
 
     files: dict[str, FileStorage] = request.files.to_dict()  # may be empty
+    
+    if "request_type" not in request.form:
+            return "You didn't provide attribute `request_type`", 400
 
     # ----- logic ----- #
     try:
@@ -173,9 +176,6 @@ def report_score() -> ResponseReturnValue:
             assert False, "unreachable"
     except Exception:
         return f"There is no student with user_id {user_id} or username {username}", 404
-    
-    if "request_type" not in request.form:
-        return "You didn't provide attribute `request_type`", 400
     
     review = {"approve": TaskReviewStatus.ACCEPTED, "reject": TaskReviewStatus.REJECTED}.get(request.form["request_type"], None)
     merge_request_iid = request.form.get("merge_request_iid", None)

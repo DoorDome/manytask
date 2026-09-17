@@ -84,6 +84,8 @@ class Course:
         assert self.config is not None, "Config is not ready, we should never fetch deadlines without config"
         return self.config.deadlines
 
+
+    # what for? soon to be deprecated 
     @property
     def deadlines_cache_time(self) -> datetime:
         return self._cache.get("__deadlines_cache_time__")

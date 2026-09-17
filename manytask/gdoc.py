@@ -347,6 +347,8 @@ class RatingTable:
         update_fn: Callable[..., Any],
         review: TaskReviewStatus,
     ) -> SubmissionStatus:
+        
+        # --- store in gdoc ---
         try:
             student_row = self._find_login_row(student.username)
         except LoginNotFound:
@@ -388,12 +390,13 @@ class RatingTable:
             student_row,
             PublicAccountsSheetOptions.GITLAB_COLUMN,
             self.create_student_repo_link(student),
-        )
+        ) # todo : why this cell needs to be updated?
         self.ws.update_cells(
             [repo_link_cell, score_cell, review_cell, reviewer_cell],
             value_input_option=ValueInputOption.user_entered,
         )
-
+        
+        # --- store in cashe ---
         tasks = self._list_tasks(with_index=False)
         scores = self._get_row_values(
             student_row,
