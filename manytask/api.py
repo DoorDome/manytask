@@ -16,8 +16,9 @@ from flask.typing import ResponseReturnValue
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-from .config import ManytaskGroupConfig, ManytaskTaskConfig, TaskReviewStatus
+from .config import ManytaskGroupConfig, ManytaskTaskConfig
 from .course import DEFAULT_TIMEZONE, Course, get_current_time
+from .review import MANUAL_REVIEW_EVENTS, ReviewEvent
 
 
 logger = logging.getLogger(__name__)
@@ -177,17 +178,17 @@ def report_score() -> ResponseReturnValue:
     except Exception:
         return f"There is no student with user_id {user_id} or username {username}", 404
     
-    review = {"approve": TaskReviewStatus.ACCEPTED, "reject": TaskReviewStatus.REJECTED}.get(request.form["request_type"], None)
-    merge_request_iid = request.form.get("merge_request_iid", None)
-    if review is None:
-        if merge_request_iid is None:
-            review = TaskReviewStatus.SOLVED
-        else:
-            review = TaskReviewStatus.SOLVED_WITH_MR
-            course.rating_table.update_reviewers_list(course.gitlab_api.list_reviewers())
-
-    if TaskReviewStatus.is_review_status(review):
-        job_username = request.form["reported_by"]
+    request_type = request.form["request_type"]
+    if request_type == "reject":
+        return "Use changes_oral or changes_written to select the next review stage", 400
+    if request_type in (ReviewEvent.TESTS_PASSED.value, ReviewEvent.TESTS_FAILED.value):
+        return "Automatic review events are derived from the reported score", 400
+    action = next((event for event in MANUAL_REVIEW_EVENTS if event.value == request_type), None)
+    merge_request_iid = request.form.get("merge_request_iid", "").strip() or None
+    if action is not None:
+        job_username = request.form.get("reported_by")
+        if not job_username:
+            return "You didn't provide required attribute `reported_by`", 400
         job_student = course.gitlab_api.get_student_by_username(job_username)
         if not course.gitlab_api.is_reviewer(job_student):
             return "You are not allowed to run review job", 403
@@ -195,9 +196,9 @@ def report_score() -> ResponseReturnValue:
     submission_status = course.rating_table.SubmissionStatus(0, "", "")
     if not course.gitlab_api.is_reviewer(student):
         submit_time = submit_time or course.deadlines.get_now_with_timezone()
-        submit_time.replace(tzinfo=ZoneInfo(course.deadlines.timezone))
+        submit_time = submit_time.astimezone(ZoneInfo(course.deadlines.timezone))
 
-        logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline} review {review}")
+        logger.info(f"Save score {reported_score} for @{student} on task {task.name} check_deadline {check_deadline} review {action}")
         logger.info(f"verify deadline: Use submit_time={submit_time}")
 
         if reported_score is None:
@@ -213,7 +214,18 @@ def report_score() -> ResponseReturnValue:
             submit_time=submit_time,
             check_deadline=check_deadline,
         )
-        submission_status = course.rating_table.store_score(student, task.name, update_function, review)
+        successful = reported_score >= task.score
+        event = action or (ReviewEvent.TESTS_PASSED if successful else ReviewEvent.TESTS_FAILED)
+        if action is None and successful and merge_request_iid is not None:
+            course.rating_table.update_reviewers_list(course.gitlab_api.list_reviewers())
+        try:
+            submission_status = course.rating_table.store_score(
+                student, task.name, update_function, event,
+                oral_attempt_limit=course.deadlines.oral_attempt_limit,
+                has_merge_request=merge_request_iid is not None,
+            )
+        except ValueError as error:
+            return str(error), 409
 
         if not (merge_request_iid is None) and not (submission_status.reviewer is None):
             reviewer = course.gitlab_api.get_student_by_username(submission_status.reviewer)
@@ -238,7 +250,7 @@ def report_score() -> ResponseReturnValue:
         "review_status": submission_status.review,
         "reviewer": submission_status.reviewer,
         "commit_time": submit_time.isoformat(sep=" ") if submit_time else "None",
-        "submit_time": submit_time.isoformat(sep=" "),
+        "submit_time": submit_time.isoformat(sep=" ") if submit_time else "None",
     }, 200
 
 

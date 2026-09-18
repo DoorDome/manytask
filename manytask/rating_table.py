@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import logging
 import re
 from collections import defaultdict
@@ -13,7 +12,9 @@ from cachelib import BaseCache
 from gspread import Cell as GCell
 from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol, rowcol_to_a1
 
-from .config import ManytaskConfig, ManytaskDeadlinesConfig, TaskReviewStatus, TaskReviewInfo
+from .config import ManytaskConfig, ManytaskDeadlinesConfig
+from .review import ReviewEvent, ReviewState, ReviewStatus, transition
+from .spreadsheet import update_cells_request
 from .course import get_current_time
 from .glab import Student
 
@@ -72,7 +73,10 @@ class PublicAccountsSheetOptions:
     NAME_COLUMN: int = 3
     TASK_SCORES_START_COLUMN: int = 4
 
-    COLUMNS_PER_TASK: int = 3
+    COLUMNS_PER_TASK: int = 4
+    ORAL_OFFSET: int = 1
+    WRITTEN_OFFSET: int = 2
+    REVIEWER_OFFSET: int = 3
 
 
 class LoginNotFound(KeyError):
@@ -152,7 +156,7 @@ class RatingTable:
     def get_reviews(
         self,
         username: str,
-    ) -> dict[str, TaskReviewInfo]:
+    ) -> dict[str, ReviewStatus]:
         reviews = self._cache.get(f"{self.ws.id}:reviews:{username}")
         if reviews is None:
             reviews = {}
@@ -161,7 +165,7 @@ class RatingTable:
     def update_reviews(
         self,
         username: str,
-        reviews_data: dict[str, TaskReviewInfo],
+        reviews_data: dict[str, ReviewStatus],
     ) -> None:
         self._cache.set(f"{self.ws.id}:reviews:{username}", reviews_data)
 
@@ -174,7 +178,7 @@ class RatingTable:
             return 0
         return bonus_scores.get(username, 0)
 
-    def get_all_scores_reviews(self) -> dict[str, dict[str, tuple[int, TaskReviewInfo, str | None]]]:
+    def get_all_scores_reviews(self) -> dict[str, dict[str, tuple[int, ReviewStatus, str | None]]]:
         all_scores = self._cache.get(f"{self.ws.id}:scores_reviews")
         if all_scores is None:
             all_scores = {}
@@ -203,12 +207,14 @@ class RatingTable:
         header = raw_values[PublicAccountsSheetOptions.HEADER_ROW - 1]
         # logger.info(f"header: {header}")
 
-        for row in raw_values[PublicAccountsSheetOptions.STUDENTS_START_ROW:]:
+        for row in raw_values[PublicAccountsSheetOptions.STUDENTS_START_ROW - 1:]:
             user_data = {"params": dict(), "tasks": dict()}
             # logger.info(f"user: {row[PublicAccountsSheetOptions.LOGIN_COLUMN - 1]}")
             for index, value in enumerate(row[:PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1]):
                 user_data["params"][header[index]] = value
-            for index in range(PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1, len(row), PublicAccountsSheetOptions.COLUMNS_PER_TASK):
+            for index in range(PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1, min(len(row), len(header)), PublicAccountsSheetOptions.COLUMNS_PER_TASK):
+                if not header[index]:
+                    continue
                 user_data["tasks"][header[index]] = tuple(row[index:index + PublicAccountsSheetOptions.COLUMNS_PER_TASK])
             result.append(user_data)
         return result
@@ -221,7 +227,11 @@ class RatingTable:
 
         all_scores_and_reviews = {
             user_data["params"]["login"]: {
-                k: (int(v[0]),  TaskReviewInfo.from_string(v[1] if len(v) > 1 else ""), v[2] if len(v) > 2 and v[2] else None)
+                k: (
+                    int(v[0]),
+                    ReviewState.from_columns(v[1] if len(v) > 1 else "", v[2] if len(v) > 2 else "").status,
+                    v[3] if len(v) > 3 and v[3] else None,
+                )
                 for k, v in user_data["tasks"].items()
                 if len(v[0]) > 0
             }
@@ -270,88 +280,57 @@ class RatingTable:
         self._cache.set(f"{self.ws.id}:reviewers", reviewers_order)
         self._cache.set_many(users_score_cache)
 
+    @staticmethod
+    def _read_task_values(row_values: list[str], column: int) -> tuple[int | None, ReviewState, str | None]:
+        options = PublicAccountsSheetOptions
+        cells = row_values[column - 1:column - 1 + options.COLUMNS_PER_TASK]
+        cells += [""] * (options.COLUMNS_PER_TASK - len(cells))
+        score = int(cells[0]) if cells[0] != "" else None
+        state = ReviewState.from_columns(cells[options.ORAL_OFFSET], cells[options.WRITTEN_OFFSET])
+        return score, state, cells[options.REVIEWER_OFFSET] or None
+
     def store_score(
         self,
         student: Student,
         task_name: str,
         update_fn: Callable[..., Any],
-        review: TaskReviewStatus,
+        event: ReviewEvent,
+        *,
+        oral_attempt_limit: int,
+        has_merge_request: bool = False,
     ) -> SubmissionStatus:
-
-        # --- store in gdoc ---
+        column = self._find_task_column(task_name)
         try:
-            student_row = self._find_login_row(student.username)
+            row = self._find_login_row(student.username)
+            values = self.ws.row_values(row)
         except LoginNotFound:
-            student_row = self._add_student_row(student)
+            row, values = None, []
+        score, old_state, reviewer = self._read_task_values(values, column)
+        new_state = transition(old_state, event, oral_attempt_limit, has_merge_request=has_merge_request)
+        if event == ReviewEvent.TESTS_FAILED:
+            return self.SubmissionStatus(score or 0, old_state.status.value, reviewer)
 
-        task_column = self._find_task_column(task_name)
+        if event == ReviewEvent.TESTS_PASSED and score is None:
+            score = update_fn("")
+        if row is None:
+            row = self._add_student_row(student)
+        if event == ReviewEvent.TESTS_PASSED and has_merge_request and reviewer is None:
+            reviewer = self.pop_reviewer()
+        self.ws.spreadsheet.batch_update({"requests": [update_cells_request(
+            self.ws.id, row, column, [score or 0, *new_state.columns(), reviewer or ""],
+        )]})
 
-        score_cell = self.ws.cell(student_row, task_column)
-        old_score: int | None = int(score_cell.value) if score_cell.value else None
-
-        review_cell = self.ws.cell(student_row, task_column + 1)
-        old_review = TaskReviewInfo.from_string(review_cell.value if review_cell.value else "")
-
-        reviewer_cell = self.ws.cell(student_row, task_column + 2)
-        old_reviewer: str | None = reviewer_cell.value if reviewer_cell.value else None
-
-        if not TaskReviewStatus.is_review_status(review) and old_score is None:
-            new_score = update_fn("")
-            new_review = old_review
-            score_cell.value = new_score
-            logger.info(f"Setting score = {new_score}")
-        else:
-            new_score = old_score if old_score else 0
-
-        new_review = self._format_review(old_review, review)
-        review_cell.value = new_review
-        logger.info(f"Setting review = {new_review}")
-
-        new_reviewer = old_reviewer
-        if new_reviewer is None and review == TaskReviewStatus.SOLVED_WITH_MR:
-            new_reviewer = self.pop_reviewer()
-            if not (new_reviewer is None):
-                reviewer_cell.value = new_reviewer
-                logger.info(f"Setting reviewer = {new_reviewer}")
-            else:
-                logger.warning("No reviewers found")
-
-        repo_link_cell = GCell(
-            student_row,
-            PublicAccountsSheetOptions.GITLAB_COLUMN,
-            self.create_student_repo_link(student),
-        ) # todo : why this cell needs to be updated?
-        self.ws.update_cells(
-            [repo_link_cell, score_cell, review_cell, reviewer_cell],
-            value_input_option=ValueInputOption.user_entered,
-        )
-
-        # --- store in cashe ---
-        tasks = self._list_tasks(with_index=False)
-        scores = self._get_row_values(
-            student_row,
-            start=PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1,
-            step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
-            with_index=False,
-        )
-        student_scores = {task: score for task, score in zip(deepcopy(tasks), scores) if score or str(score) == "0"}
-
-        reviews = self._get_row_values(
-            student_row,
-            start=PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN,
-            step=PublicAccountsSheetOptions.COLUMNS_PER_TASK,
-            with_index=False,
-        )
-        student_reviews = {task: TaskReviewInfo.from_string(review)
-                           for task, review in zip(tasks, reviews)
-                           if review}
-
-        logger.info(f"Actual scores: {student_scores}")
-        logger.info(f"Actual reviews: {student_reviews}")
-
-        self.update_scores(student.username, student_scores)
-        self.update_reviews(student.username, student_reviews)
-        return self.SubmissionStatus(new_score, new_review, new_reviewer)
+        # Preserve the existing full-student cache refresh, including other tasks on a cache miss.
+        values = self.ws.row_values(row)
+        scores, reviews = {}, {}
+        for task_column, task in self._list_tasks(with_index=True):
+            if task:
+                task_score, state, _ = self._read_task_values(values, task_column)
+                if task_score is not None:
+                    scores[task], reviews[task] = task_score, state.status
+        self.update_scores(student.username, scores)
+        self.update_reviews(student.username, reviews)
+        return self.SubmissionStatus(score or 0, new_state.status.value, reviewer)
 
     def sync_columns(
         self,
@@ -381,8 +360,9 @@ class RatingTable:
                 col = current_worksheet_size + 1 + PublicAccountsSheetOptions.COLUMNS_PER_TASK * index
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.HEADER_ROW, col, task.name))
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col, "score"))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 1, "status"))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 2, "reviewer"))
+                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 1, "oral"))
+                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 2, "written"))
+                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 3, "reviewer"))
                 cells_to_update.append(GCell(PublicAccountsSheetOptions.MAX_SCORES_ROW, col, str(task.score)))
 
                 task_group_name = task_name_to_group_name[task.name]
@@ -501,23 +481,6 @@ class RatingTable:
         updated_range_upper_bound = updated_range.split(":")[1]
         row_count, _ = a1_to_rowcol(updated_range_upper_bound)
         return row_count
-
-    @staticmethod
-    def _format_review(old_value: TaskReviewInfo, review_status: TaskReviewStatus) -> str:
-        # logger.info(f"initial {old_value}, review {review_status}")
-        gen_trunkated_string = lambda att: (str(att) if att > 0 else "")
-        bad_attempts = old_value.bad_attempts
-
-        if not TaskReviewStatus.is_review_status(review_status):
-            if old_value.status == TaskReviewStatus.ACCEPTED:
-                return f"'{TaskReviewStatus.ACCEPTED.value}{gen_trunkated_string(bad_attempts)}"
-            return f"'{review_status.value}{gen_trunkated_string(bad_attempts)}"
-        elif review_status == TaskReviewStatus.ACCEPTED:
-            return f"'{TaskReviewStatus.ACCEPTED.value}{gen_trunkated_string(bad_attempts)}"
-        else:
-            if not old_value.status == TaskReviewStatus.REJECTED:
-                bad_attempts += 1
-            return f"'{TaskReviewStatus.REJECTED.value}{bad_attempts}"
 
     @staticmethod
     def create_student_repo_link(
