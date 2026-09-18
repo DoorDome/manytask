@@ -37,7 +37,7 @@ def validate_submit_time(commit_time: datetime | None, current_time: datetime) -
     return current_time
 
 
-from . import config, gdoc, glab, solutions  # noqa: E402, F401
+from . import config, gdoc, glab, rating_table, solutions  # noqa: E402, F401
 
 
 class Course:
@@ -107,5 +107,5 @@ class Course:
         self._cache.set("__config__", content)
 
     @property
-    def rating_table(self) -> "gdoc.RatingTable":
+    def rating_table(self) -> "rating_table.RatingTable":
         return self.googledoc_api.fetch_rating_table()
