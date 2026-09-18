@@ -26,6 +26,7 @@ deadlines:
   deadlines: hard  # hard/interpolate
   max_submissions: 10  # optional
   submission_penalty: 0.1  # optional
+  oral_attempt_limit: 3  # optional, positive integer
 
   schedule:
 
