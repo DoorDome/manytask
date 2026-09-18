@@ -129,6 +129,7 @@ class ManytaskDeadlinesConfig(BaseModel):
     deadlines: ManytaskDeadlinesType = ManytaskDeadlinesType.HARD
     max_submissions: Optional[int] = None
     submission_penalty: float = 0
+    oral_attempt_limit: int = Field(default=3, gt=0, strict=True)
 
     schedule: list[ManytaskGroupConfig]  # list of groups with tasks
 
