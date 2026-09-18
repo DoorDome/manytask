@@ -63,3 +63,34 @@ and the launching reviewer is `GITLAB_USER_LOGIN`. Jobs POST URL-encoded fields
 to `/api/report`; neither score nor a new MR ID is required for manual decisions.
 Verify that the course's automatic reporter actually supplies `merge_request_iid`.
 Offline tests do not establish that the external CI has been deployed.
+
+## Independent review summary
+
+`review_details` has one row per `(login, task)`, with these columns in order:
+
+```text
+login, task, group, oral_attempts, last_oral_review_at,
+written_attempts, last_written_review_at, first_successful_submission_at,
+last_successful_submission_at, stage, status
+```
+
+Stage, status and counters are copies of the completed main-sheet transition.
+They are never read to decide the next transition. Only the four dates are read
+back, solely to preserve the summary's first/latest timestamps. They are stored
+as timezone-aware ISO strings with a space separator; blank means unknown.
+
+Successful reports, including those before MR creation and after terminal review,
+set the first successful date once and update the last successful date. The last
+date is from the last processed report, not the maximum of all event dates.
+Automatic dates use `submit_time` (`%Y-%m-%d %H:%M:%S%z`) or course time when
+omitted. Manual decisions use server time and update the date of the stage that
+was reviewed, not the next stage selected by the decision.
+
+The main write finishes before any summary read/write. Failed tests and invalid
+actions never access the summary. A summary error is logged with login/task and
+does not reject or roll back an already completed review. No dates or hidden
+metadata columns are added to the main sheet. After a summary failure, subsequent
+reports can refresh its status/counters but cannot reconstruct a lost event date.
+There is no append-only event log or automatic retry queue. Sheet creation and
+sequential keyed upserts are idempotent; duplicate keys or unexpected headers are
+reported instead of overwriting history.
