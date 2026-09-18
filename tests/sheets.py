@@ -56,6 +56,25 @@ class Workbook:
                     for col, cell in enumerate(row['values']):
                         value = next(iter(cell['userEnteredValue'].values()))
                         sheet.set_cell(start['rowIndex'] + offset, start['columnIndex'] + col, str(value))
+            elif 'insertDimension' in request:
+                bounds = request['insertDimension']['range']
+                sheet = next(s for s in self.sheets.values() if s.id == bounds['sheetId'])
+                assert bounds['dimension'] == 'COLUMNS'
+                start, end = bounds['startIndex'], bounds['endIndex']
+                assert start <= sheet.col_count
+                width = end - start
+                for row in sheet.rows:
+                    row += [''] * (sheet.col_count - len(row))
+                    row[start:start] = [''] * width
+                sheet.formats = {(row, col + width if col >= start else col): fmt
+                                 for (row, col), fmt in sheet.formats.items()}
+                sheet.col_count += width
+            elif 'repeatCell' in request:
+                bounds = request['repeatCell']['range']
+                sheet = next(s for s in self.sheets.values() if s.id == bounds['sheetId'])
+                for row in range(bounds['startRowIndex'], bounds['endRowIndex']):
+                    for col in range(bounds['startColumnIndex'], bounds['endColumnIndex']):
+                        sheet.formats[row, col] = request['repeatCell']['cell']['userEnteredFormat']
             elif 'appendDimension' in request:
                 append = request['appendDimension']
                 sheet = next(s for s in self.sheets.values() if s.id == append['sheetId'])
@@ -71,6 +90,7 @@ class Sheet:
     def __init__(self, spreadsheet, title, sheet_id, rows=100, cols=3):
         self.spreadsheet, self.title, self.id = spreadsheet, title, sheet_id
         self.rows = []
+        self.formats = {}
         self.row_count, self.col_count = rows, cols
         self.format = Mock()
         self.update_cells = Mock(side_effect=self._update_cells)
