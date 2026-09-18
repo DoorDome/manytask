@@ -10,15 +10,14 @@ from typing import Any, Callable, Iterable
 
 import gspread
 from cachelib import BaseCache
-from gspread import Cell as GCell
 from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol
 
 from .config import ManytaskConfig, ManytaskDeadlinesConfig
-from .review import ReviewEvent, ReviewState, ReviewStatus, transition
-from .spreadsheet import update_cells_request
-from .review_sheet import ReviewDetailsSheet
 from .course import get_current_time
 from .glab import Student
+from .review import ReviewEvent, ReviewState, ReviewStatus, transition
+from .review_sheet import ReviewDetailsSheet
+from .spreadsheet import update_cells_request
 
 
 logger = logging.getLogger(__name__)
@@ -396,7 +395,9 @@ class RatingTable:
             requests.extend([
                 update_cells_request(self.ws.id, options.MAX_SCORES_ROW, column, [task.score]),
                 update_cells_request(self.ws.id, options.HEADER_ROW, column, [task.name]),
-                update_cells_request(self.ws.id, options.SUBHEADER_ROW, column, ["score", "oral", "written", "reviewer"]),
+                update_cells_request(
+                    self.ws.id, options.SUBHEADER_ROW, column, ["score", "oral", "written", "reviewer"],
+                ),
             ])
             for start_row, end_row, formatting in (
                 (options.GROUPS_ROW - 1, options.GROUPS_ROW, GROUP_ROW_FORMATTING),
