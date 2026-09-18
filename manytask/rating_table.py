@@ -5,6 +5,7 @@ import re
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from itertools import islice
 from typing import Any, Callable, Iterable
 
@@ -16,6 +17,7 @@ from .config import ManytaskConfig, ManytaskDeadlinesConfig
 from .course import get_current_time
 from .glab import Student
 from .review import ReviewEvent, ReviewState, ReviewStatus, transition
+from .review_sheet import ReviewDetailsSheet
 from .spreadsheet import update_cells_request
 
 
@@ -305,8 +307,13 @@ class RatingTable:
         event: ReviewEvent,
         *,
         oral_attempt_limit: int,
+        group_name: str,
+        at: datetime,
         has_merge_request: bool = False,
     ) -> SubmissionStatus:
+        if at.utcoffset() is None:
+            raise ValueError("Review timestamps must include a timezone")
+        
         column = self._find_task_column(task_name)
         try:
             row = self._find_login_row(student.username)
@@ -341,6 +348,13 @@ class RatingTable:
                     scores[task], reviews[task] = task_score, state.status
         self.update_scores(student.username, scores)
         self.update_reviews(student.username, reviews)
+        try:
+            ReviewDetailsSheet(self.ws.spreadsheet).record(
+                student.username, task_name, group_name, old_state, new_state, event, at,
+            )
+        except Exception:
+            # The main transition succeeded; a summary error must not invite a retry of it.
+            logger.exception("Cannot update review_details for %s/%s", student.username, task_name)
         return self.SubmissionStatus(score or 0, new_state.status.value, reviewer)
 
     def sync_columns(

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -7,6 +8,9 @@ from cachelib import SimpleCache
 from manytask.rating_table import RatingTable
 from manytask.review import ReviewEvent as E, ReviewStatus as S
 from tests.sheets import Workbook, course_config, student
+
+
+NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 @pytest.fixture
@@ -24,7 +28,7 @@ def table():
 
 
 def submit(table, event=E.TESTS_PASSED, **kwargs):
-    return table.store_score(student(), 'task', lambda _: 10, event, oral_attempt_limit=3, **kwargs)
+    return table.store_score(student(), 'task', lambda _: 10, event, oral_attempt_limit=3, group_name="group", at=NOW, **kwargs)
 
 
 def test_fresh_course_schema_and_complete_workflow(table):
@@ -66,8 +70,8 @@ def test_conflicting_main_state_is_rejected_without_writes(table):
 
 
 def test_repeated_submission_preserves_zero_score_and_other_tasks_on_cache_miss(table):
-    table.store_score(student(), 'other', lambda _: 7, E.TESTS_PASSED, oral_attempt_limit=3)
-    table.store_score(student(), 'task', lambda _: 0, E.TESTS_PASSED, oral_attempt_limit=3)
+    table.store_score(student(), 'other', lambda _: 7, E.TESTS_PASSED, oral_attempt_limit=3, group_name="group", at=NOW)
+    table.store_score(student(), 'task', lambda _: 0, E.TESTS_PASSED, oral_attempt_limit=3, group_name="group", at=NOW)
     table._cache.delete(f'{table.ws.id}:scores:alice')
     table._cache.delete(f'{table.ws.id}:reviews:alice')
     assert submit(table, has_merge_request=True).score == 0
@@ -80,7 +84,7 @@ def test_manual_action_does_not_regrade_or_reassign(table):
     submit(table, has_merge_request=True)
     assert table.ws.rows[4][6] == 'assistant'
     update = Mock(side_effect=AssertionError('Manual regrade'))
-    table.store_score(student(), 'task', update, E.CHANGES_WRITTEN, oral_attempt_limit=3)
+    table.store_score(student(), 'task', update, E.CHANGES_WRITTEN, oral_attempt_limit=3, group_name="group", at=NOW)
     update.assert_not_called()
     assert table.ws.rows[4][3] == '10'
     assert table.ws.rows[4][6] == 'assistant'

@@ -100,3 +100,29 @@ def test_ci_exposes_exactly_three_manual_actions():
     assert set(jobs) == {'review-accept', 'review-changes-oral', 'review-changes-written'}
     assert {job['variables']['REVIEW_ACTION'] for job in jobs.values()} == {e.value for e in MANUAL_REVIEW_EVENTS}
     assert config['.manytask-review']['rules'][0]['when'] == 'manual'
+
+
+def test_summary_failure_after_acceptance_is_still_success(api):
+    assert report(api, merge_request_iid='12').status_code == 200
+    assert report(api, request_type='changes_written', reported_by='assistant').status_code == 200
+    assert report(api).status_code == 200
+    api[1].rating_table.ws.spreadsheet.worksheet.side_effect = RuntimeError('summary unavailable')
+    result = report(api, request_type='approve', reported_by='assistant')
+    assert result.status_code == 200
+    assert result.json['review_status'] == '+'
+    assert api[1].rating_table.ws.rows[4][4:6] == ['1', '+1']
+
+
+def test_api_preserves_instants_and_uses_server_time_for_manual_review(api, monkeypatch):
+    from datetime import datetime, timezone
+    from manytask.config import ManytaskDeadlinesConfig
+    from manytask.review_sheet import REVIEW_DETAILS_COLUMNS
+    now = datetime(2026, 1, 3, tzinfo=timezone.utc)
+    monkeypatch.setattr(ManytaskDeadlinesConfig, 'get_now_with_timezone', lambda _: now)
+    result = report(api, submit_time='2026-01-01 03:00:00+0300', merge_request_iid='12')
+    assert result.json['submit_time'] == '2026-01-01 00:00:00+00:00'
+    report(api, request_type='changes_written', reported_by='assistant', submit_time='2000-01-01 00:00:00+0000')
+    row = api[1].rating_table.ws.spreadsheet.worksheet('review_details').rows[1]
+    values = dict(zip(REVIEW_DETAILS_COLUMNS, row))
+    assert values['first_successful_submission_at'] == '2026-01-01 00:00:00+00:00'
+    assert values['last_oral_review_at'] == now.isoformat(sep=' ')
