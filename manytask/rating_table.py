@@ -11,7 +11,7 @@ from typing import Any, Callable, Iterable
 import gspread
 from cachelib import BaseCache
 from gspread import Cell as GCell
-from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol, rowcol_to_a1
+from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol
 
 from .config import ManytaskConfig, ManytaskDeadlinesConfig
 from .review import ReviewEvent, ReviewState, ReviewStatus, transition
@@ -345,70 +345,81 @@ class RatingTable:
             logger.exception("Cannot update review_details for %s/%s", student.username, task_name)
         return self.SubmissionStatus(score or 0, new_state.status.value, reviewer)
 
-    def sync_columns(
-        self,
-        deadlines_config: ManytaskDeadlinesConfig,
-    ) -> None:
-        max_score = deadlines_config.max_score_started
-        groups = deadlines_config.get_groups(enabled=True, started=True)
+    def sync_columns(self, deadlines_config: ManytaskDeadlinesConfig) -> None:
+        options = PublicAccountsSheetOptions
         tasks = deadlines_config.get_tasks(enabled=True, started=True)
-        task_name_to_group_name = {task.name: group.name for group in groups for task in group.tasks if task in tasks}
+        configured = [task.name for task in tasks]
+        task_groups = {
+            task.name: group.name
+            for group in deadlines_config.get_groups(enabled=True, started=True)
+            for task in group.tasks if task.name in configured
+        }
+        existing_columns = [(column, name) for column, name in self._list_tasks(with_index=True) if name]
+        existing = [name for _, name in existing_columns]
+        if len(set(existing)) != len(existing):
+            raise ValueError("Duplicate task headers in main sheet")
+        if any(name not in configured for name in existing):
+            raise ValueError("Removing existing tasks is not supported by sheet synchronization")
+        if [name for name in configured if name in existing] != existing:
+            raise ValueError("Reordering existing tasks is not supported by sheet synchronization")
 
-        # TODO: maintain group orger when adding new task in added group
-        logger.info("Syncing rating columns...")
-        existing_tasks = list(self._list_tasks(with_index=False))
-        existing_task_names = set(task for task in existing_tasks if task)
-        tasks_to_create = [task for task in tasks if task.name not in existing_task_names]
+        group_row = self.ws.row_values(options.GROUPS_ROW)
+        labels = {}
+        group = ""
+        for index, (column, name) in enumerate(existing_columns):
+            if column != options.TASK_SCORES_START_COLUMN + index * options.COLUMNS_PER_TASK:
+                raise ValueError("Task blocks must be contiguous")
+            label = group_row[column - 1] if column <= len(group_row) else ""
+            group = label or group
+            if group != task_groups[name]:
+                raise ValueError(f"Moving existing task {name} to another group is not supported")
+            labels[name] = label
 
-        current_worksheet_size = PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN + len(existing_tasks) * PublicAccountsSheetOptions.COLUMNS_PER_TASK - 1
-        required_worksheet_size = current_worksheet_size
-        if tasks_to_create:
-            required_worksheet_size = current_worksheet_size + len(tasks_to_create) * PublicAccountsSheetOptions.COLUMNS_PER_TASK
+        requests = []
+        ordered = list(existing)
+        new_tasks = [task for task in tasks if task.name not in existing]
+        for task in new_tasks:
+            position = configured.index(task.name)
+            following = next((name for name in configured[position + 1:] if name in ordered), None)
+            insert_at = ordered.index(following) if following is not None else len(ordered)
+            column_index = options.TASK_SCORES_START_COLUMN - 1 + insert_at * options.COLUMNS_PER_TASK
+            requests.append({"insertDimension": {
+                "range": {"sheetId": self.ws.id, "dimension": "COLUMNS",
+                          "startIndex": column_index, "endIndex": column_index + options.COLUMNS_PER_TASK},
+                "inheritFromBefore": True,
+            }})
+            ordered.insert(insert_at, task.name)
+            labels[task.name] = ""
 
-            self.ws.resize(cols=required_worksheet_size)
+        for task in new_tasks:
+            column = options.TASK_SCORES_START_COLUMN + ordered.index(task.name) * options.COLUMNS_PER_TASK
+            requests.extend([
+                update_cells_request(self.ws.id, options.MAX_SCORES_ROW, column, [task.score]),
+                update_cells_request(self.ws.id, options.HEADER_ROW, column, [task.name]),
+                update_cells_request(self.ws.id, options.SUBHEADER_ROW, column, ["score", "oral", "written", "reviewer"]),
+            ])
+            for start_row, end_row, formatting in (
+                (options.GROUPS_ROW - 1, options.GROUPS_ROW, GROUP_ROW_FORMATTING),
+                (options.MAX_SCORES_ROW - 1, options.SUBHEADER_ROW, HEADER_ROW_FORMATTING),
+            ):
+                requests.append({"repeatCell": {
+                    "range": {"sheetId": self.ws.id, "startRowIndex": start_row, "endRowIndex": end_row,
+                              "startColumnIndex": column - 1,
+                              "endColumnIndex": column - 1 + options.COLUMNS_PER_TASK},
+                    "cell": {"userEnteredFormat": formatting}, "fields": "userEnteredFormat",
+                }})
 
-            cells_to_update = []
-            current_group = None
-            for index, task in enumerate(tasks_to_create):
-                col = current_worksheet_size + 1 + PublicAccountsSheetOptions.COLUMNS_PER_TASK * index
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.HEADER_ROW, col, task.name))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col, "score"))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 1, "oral"))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 2, "written"))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.SUBHEADER_ROW, col + 3, "reviewer"))
-                cells_to_update.append(GCell(PublicAccountsSheetOptions.MAX_SCORES_ROW, col, str(task.score)))
-
-                task_group_name = task_name_to_group_name[task.name]
-
-                if task_group_name != current_group:
-                    cells_to_update.append(GCell(PublicAccountsSheetOptions.GROUPS_ROW, col, task_group_name))
-                    current_group = task_group_name
-        else:
-            cells_to_update = []
-
-        if cells_to_update:
-            self.ws.update_cells(cells_to_update, value_input_option=ValueInputOption.user_entered)
-
-            self.ws.format(
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.GROUPS_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.GROUPS_ROW, required_worksheet_size)}",
-                GROUP_ROW_FORMATTING,
-            )
-            self.ws.format(
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.MAX_SCORES_ROW, required_worksheet_size)}",
-                HEADER_ROW_FORMATTING,
-            )
-            self.ws.format(
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.HEADER_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.HEADER_ROW, required_worksheet_size)}",
-                HEADER_ROW_FORMATTING,
-            )
-            self.ws.format(
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.SUBHEADER_ROW, PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN)}:"  # noqa: E501
-                f"{rowcol_to_a1(PublicAccountsSheetOptions.SUBHEADER_ROW, required_worksheet_size)}",
-                HEADER_ROW_FORMATTING,
-            )
+        previous_group = None
+        for index, name in enumerate(ordered):
+            group = task_groups[name]
+            label = group if group != previous_group else ""
+            if label != labels[name]:
+                column = options.TASK_SCORES_START_COLUMN + index * options.COLUMNS_PER_TASK
+                requests.append(update_cells_request(self.ws.id, options.GROUPS_ROW, column, [label]))
+            previous_group = group
+        if requests:
+            # Sheets shifts existing cells, formulas and ranges; no old task block is rewritten.
+            self.ws.spreadsheet.batch_update({"requests": requests})
 
     def _get_row_values(
         self,

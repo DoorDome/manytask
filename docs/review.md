@@ -94,3 +94,17 @@ reports can refresh its status/counters but cannot reconstruct a lost event date
 There is no append-only event log or automatic retry queue. Sheet creation and
 sequential keyed upserts are idempotent; duplicate keys or unexpected headers are
 reported instead of overwriting history.
+
+## Extending task groups
+
+`sync_columns` inserts a four-column block for each new configured, enabled,
+started task, preserving the configured task/group order. Existing values are
+shifted by Google Sheets `insertDimension`, along with formulas and ranges.
+Only new headers are formatted. Groups use a label above the first task, not
+merged cells; inserting a new first task moves that label. Existing students get
+empty cells, and new students use the same schema. Repeating sync is a no-op.
+The summary sheet is not read or written during synchronization.
+
+Removing, reordering or moving existing tasks between groups is outside this
+operation: such configurations fail before any writes. The operation never
+rebuilds or shrinks the sheet to match a new configuration.
