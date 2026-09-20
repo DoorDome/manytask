@@ -42,10 +42,10 @@ def test_complete_review_with_return_to_oral():
 
 STATES = [
     ReviewState(), ReviewState(status=S.SOLVED_WITHOUT_MR),
-    ReviewState(status=S.WAITING, oral_attempts=1),
-    ReviewState(status=S.CHANGES, oral_attempts=1),
-    ReviewState(Stage.WRITTEN, S.CHANGES, 1, 0),
-    ReviewState(Stage.WRITTEN, S.WAITING, 1, 2),
+    ReviewState(status=S.READY_TO_BE_CHECKED, oral_attempts=1),
+    ReviewState(status=S.CHANGES_REQUESTED, oral_attempts=1),
+    ReviewState(Stage.WRITTEN, S.CHANGES_REQUESTED, 1, 0),
+    ReviewState(Stage.WRITTEN, S.READY_TO_BE_CHECKED, 1, 2),
     ReviewState(Stage.WRITTEN, S.ACCEPTED, 1, 2),
     ReviewState(status=S.FAILED, oral_attempts=3, written_attempts=2),
 ]
@@ -57,9 +57,9 @@ def test_failed_tests_and_rendering_do_not_mutate(state):
     assert ReviewState.from_columns(*state.columns()) == state
 
 
-@pytest.mark.parametrize('state', [s for s in STATES if s.status != S.WAITING])
+@pytest.mark.parametrize('state', [s for s in STATES if s.status != S.READY_TO_BE_CHECKED])
 @pytest.mark.parametrize('event', MANUAL_REVIEW_EVENTS)
-def test_manual_actions_require_waiting(state, event):
+def test_manual_actions_require_ready_to_be_checked(state, event):
     before = replace(state)
     with pytest.raises(ValueError, match='waiting'):
         step(state, event)
@@ -68,20 +68,20 @@ def test_manual_actions_require_waiting(state, event):
 
 def test_oral_acceptance_is_rejected():
     with pytest.raises(ValueError, match='Written review'):
-        step(ReviewState(status=S.WAITING, oral_attempts=1), E.ACCEPT)
+        step(ReviewState(status=S.READY_TO_BE_CHECKED, oral_attempts=1), E.ACCEPT)
 
 
 @pytest.mark.parametrize('stage', list(Stage))
 def test_oral_limit_when_scheduling(stage):
-    state = ReviewState(stage, S.WAITING, 3, 2)
+    state = ReviewState(stage, S.READY_TO_BE_CHECKED, 3, 2)
     failed = step(state, E.CHANGES_ORAL)
     assert failed.columns() == ('g3', 'o2')
     assert step(failed, E.TESTS_PASSED) == failed
-    assert step(state, E.CHANGES_WRITTEN).status == S.CHANGES
+    assert step(state, E.CHANGES_WRITTEN).status == S.CHANGES_REQUESTED
 
 
 def test_oral_limit_when_entering_legacy_or_corrupt_changes():
-    state = ReviewState(status=S.CHANGES, oral_attempts=3)
+    state = ReviewState(status=S.CHANGES_REQUESTED, oral_attempts=3)
     assert step(state, E.TESTS_PASSED).columns() == ('g3', 'o0')
 
 
@@ -117,3 +117,19 @@ def test_default_limit_and_first_submission_with_mr():
 def test_event_contract_is_explicit(event):
     with pytest.raises(ValueError, match='ReviewEvent'):
         step(ReviewState(), event)
+
+
+@pytest.mark.parametrize('oral,written,expected', [
+    ('-1', '2', ('?2', '2')),
+    ('2', '-0', ('2', '?1')),
+    ('3', '-5', ('3', '?6')),
+    ('?1', '2', ('?1', '2')),
+    ('2', '?3', ('2', '?3')),
+    ('2', '+3', ('2', '+3')),
+    ('g3', 'o2', ('g3', 'o2')),
+])
+@pytest.mark.parametrize('has_merge_request', [False, True])
+def test_passing_report_preserves_stage_and_counts(oral, written, expected, has_merge_request):
+    state = ReviewState.from_columns(oral, written)
+    assert step(state, E.TESTS_PASSED, has_merge_request=has_merge_request).columns() == expected
+    assert state.columns() == (oral, written)

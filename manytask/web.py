@@ -36,7 +36,7 @@ def valid_session(user_session: flask.sessions.SessionMixin) -> bool:
 def format_review_status(status: ReviewStatus) -> bool | None:
     if status == ReviewStatus.ACCEPTED:
         return True
-    if status in (ReviewStatus.CHANGES, ReviewStatus.FAILED):
+    if status in (ReviewStatus.CHANGES_REQUESTED, ReviewStatus.FAILED):
         return False
     return None
 
