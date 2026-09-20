@@ -283,6 +283,8 @@ class RatingTable:
     def _read_task_values(row_values: list[str], column: int) -> tuple[int | None, ReviewState, str | None]:
         options = PublicAccountsSheetOptions
         cells = row_values[column - 1:column - 1 + options.COLUMNS_PER_TASK]
+        # Sheets omits trailing empty cells; restore the full task block so even a new
+        # student's empty row has score, oral, written and reviewer slots for indexed reads.
         cells += [""] * (options.COLUMNS_PER_TASK - len(cells))
         score = int(cells[0]) if cells[0] != "" else None
         state = ReviewState.from_columns(cells[options.ORAL_OFFSET], cells[options.WRITTEN_OFFSET])
