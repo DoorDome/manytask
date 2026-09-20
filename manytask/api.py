@@ -18,7 +18,7 @@ from werkzeug.utils import secure_filename
 
 from .config import ManytaskGroupConfig, ManytaskTaskConfig
 from .course import DEFAULT_TIMEZONE, Course, get_current_time
-from .review import MANUAL_REVIEW_EVENTS, ReviewEvent
+from .review import ReviewEvent, parse_manual_review_action
 
 
 logger = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ def report_score() -> ResponseReturnValue:
         return "Use changes_oral or changes_written to select the next review stage", 400
     if request_type in (ReviewEvent.TESTS_PASSED.value, ReviewEvent.TESTS_FAILED.value):
         return "Automatic review events are derived from the reported score", 400
-    action = next((event for event in MANUAL_REVIEW_EVENTS if event.value == request_type), None)
+    action = parse_manual_review_action(request_type)
     merge_request_iid = request.form.get("merge_request_iid", "").strip() or None
     if action is not None:
         job_username = request.form.get("reported_by")
