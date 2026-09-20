@@ -213,9 +213,7 @@ class RatingTable:
             # logger.info(f"user: {row[PublicAccountsSheetOptions.LOGIN_COLUMN - 1]}")
             for index, value in enumerate(row[:PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1]):
                 user_data["params"][header[index]] = value
-            for index in range(PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1, min(len(row), len(header)), PublicAccountsSheetOptions.COLUMNS_PER_TASK):
-                if not header[index]:
-                    continue
+            for index in range(PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN - 1, len(row), PublicAccountsSheetOptions.COLUMNS_PER_TASK):
                 user_data["tasks"][header[index]] = tuple(row[index:index + PublicAccountsSheetOptions.COLUMNS_PER_TASK])
             result.append(user_data)
         return result
