@@ -66,9 +66,11 @@ def test_manual_actions_require_ready_to_be_checked(state, event):
     assert state == before
 
 
-def test_oral_acceptance_is_rejected():
-    with pytest.raises(ValueError, match='Written review'):
-        step(ReviewState(status=S.READY_TO_BE_CHECKED, oral_attempts=1), E.ACCEPT)
+def test_oral_acceptance_is_allowed():
+    state = ReviewState(status=S.READY_TO_BE_CHECKED, oral_attempts=1)
+    accepted = step(state, E.ACCEPT)
+    assert accepted.columns() == ('+1', '0')
+    assert ReviewState.from_columns(*accepted.columns()) == accepted
 
 
 @pytest.mark.parametrize('stage', list(Stage))
@@ -80,13 +82,13 @@ def test_oral_limit_when_scheduling(stage):
     assert step(state, E.CHANGES_WRITTEN).status == S.CHANGES_REQUESTED
 
 
-def test_oral_limit_when_entering_legacy_or_corrupt_changes():
+def test_enter_review_does_not_recheck_changed_limit():
     state = ReviewState(status=S.CHANGES_REQUESTED, oral_attempts=3)
-    assert step(state, E.TESTS_PASSED).columns() == ('g3', 'o0')
+    assert step(state, E.TESTS_PASSED).columns() == ('?4', '0')
 
 
 @pytest.mark.parametrize('oral,written', [
-    ('?1', '?1'), ('+1', '0'), ('0', '#0'), ('g3', '0'), ('3', 'o1'),
+    ('?1', '?1'), ('+0', '0'), ('0', '#1'), ('g3', '0'), ('3', 'o1'),
     ('#1', '0'), ('1', '2'), ('?', '0'), ("'?1", '0'), ('-x', '0'),
     ('?0', '0'), ('1', '+0'), ('-1', '-1'), ('-2.5', '0'),
 ])
@@ -133,3 +135,52 @@ def test_passing_report_preserves_stage_and_counts(oral, written, expected, has_
     state = ReviewState.from_columns(oral, written)
     assert step(state, E.TESTS_PASSED, has_merge_request=has_merge_request).columns() == expected
     assert state.columns() == (oral, written)
+
+
+@pytest.mark.parametrize('stages', [(Stage.ORAL,), (Stage.WRITTEN,),
+                                    (Stage.ORAL, Stage.WRITTEN), (Stage.WRITTEN, Stage.ORAL)])
+def test_configured_pipeline_first_stage_and_immediate_acceptance(stages):
+    state = step(ReviewState(), E.TESTS_PASSED, review_stages=stages)
+    assert state.stage == stages[0]
+    assert state.status == S.SOLVED_WITHOUT_MR
+    assert ReviewState.from_columns(*state.columns()) == state
+    state = step(state, E.TESTS_PASSED, review_stages=stages, has_merge_request=True)
+    assert state.stage == stages[0]
+    assert (state.oral_attempts, state.written_attempts) == ((1, 0) if stages[0] == Stage.ORAL else (0, 1))
+    accepted = step(state, E.ACCEPT, review_stages=stages)
+    assert accepted.status == S.ACCEPTED
+    assert accepted.stage == stages[0]
+    assert ReviewState.from_columns(*accepted.columns()) == accepted
+    assert step(accepted, E.TESTS_PASSED, review_stages=stages) == accepted
+
+
+@pytest.mark.parametrize('stage,event', [(Stage.ORAL, E.CHANGES_WRITTEN), (Stage.WRITTEN, E.CHANGES_ORAL)])
+def test_disabled_target_stage_is_rejected(stage, event):
+    state = ReviewState(stage, S.READY_TO_BE_CHECKED, 1, 1)
+    with pytest.raises(ValueError, match='disabled'):
+        step(state, event, review_stages=(stage,))
+
+
+@pytest.mark.parametrize('status,event', [(S.READY_TO_BE_CHECKED, E.ACCEPT),
+                                         (S.CHANGES_REQUESTED, E.TESTS_PASSED)])
+def test_disabling_current_stage_requires_explicit_state_resolution(status, event):
+    state = ReviewState(Stage.ORAL, status, 1, 0)
+    with pytest.raises(ValueError, match='Current review stage'):
+        step(state, event, review_stages=(Stage.WRITTEN,))
+    assert step(state, E.TESTS_FAILED, review_stages=(Stage.WRITTEN,)) == state
+
+
+@pytest.mark.parametrize('stages', [[], ['oral', 'oral'], ['written', 'written'], ['unknown'],
+                                    ['oral', 'written', 'oral'], None, 'oral'])
+def test_invalid_task_review_configuration(stages):
+    from manytask.config import ManytaskTaskConfig
+    with pytest.raises(ValidationError):
+        ManytaskTaskConfig(task='task', score=10, review_stages=stages)
+
+
+@pytest.mark.parametrize('stages', [['oral'], ['written'], ['oral', 'written'], ['written', 'oral']])
+def test_task_review_configuration_roundtrip(stages):
+    from manytask.config import ManytaskTaskConfig
+    task = ManytaskTaskConfig(task='task', score=10, review_stages=stages)
+    assert task.review_stages == tuple(Stage(s) for s in stages)
+    assert ManytaskTaskConfig.model_validate_json(task.model_dump_json()) == task

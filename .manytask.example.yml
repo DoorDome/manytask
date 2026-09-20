@@ -39,15 +39,20 @@ deadlines:
       tasks:
         - task: task_0_0
           score: 10
+          review_stages: [oral, written]  # default; first item is the starting stage
+          # approve on either enabled stage completes review
         - task: task_0_1
           score: 10
+          review_stages: [written]  # oral column is hidden
         - task: task_0_2
           is_bonus: true
           score: 10
         - task: task_0_3
           score: 10
+          review_stages: [oral]  # written column is hidden
         - task: task_0_4
           score: 10
+          review_stages: [written, oral]  # both available, start with written
         - task: task_0_5
           score: 10
 
