@@ -76,7 +76,7 @@ def test_repeated_submission_preserves_zero_score_and_other_tasks_on_cache_miss(
     table._cache.delete(f'{table.ws.id}:reviews:alice')
     assert submit(table, has_merge_request=True).score == 0
     assert table.get_scores('alice') == {'task': 0, 'other': 7}
-    assert table.get_reviews('alice') == {'task': S.WAITING, 'other': S.SOLVED_WITHOUT_MR}
+    assert table.get_reviews('alice') == {'task': S.READY_TO_BE_CHECKED, 'other': S.SOLVED_WITHOUT_MR}
 
 
 def test_manual_action_does_not_regrade_or_reassign(table):
@@ -94,14 +94,14 @@ def test_full_cache_includes_first_student_and_ignores_trailing_formula(table):
     submit(table, has_merge_request=True)
     table.ws.rows[4] += [''] * (table.ws.col_count - len(table.ws.rows[4])) + ['=SUM(D5:K5)']
     table.update_cached_scores()
-    assert table.get_reviews('alice') == {'task': S.WAITING}
+    assert table.get_reviews('alice') == {'task': S.READY_TO_BE_CHECKED}
     assert table.get_scores('alice') == {'task': 10}
-    assert table.get_all_scores_reviews()['alice']['task'] == (10, S.WAITING, None)
+    assert table.get_all_scores_reviews()['alice']['task'] == (10, S.READY_TO_BE_CHECKED, None)
 
 
 @pytest.mark.parametrize('status,expected', [
-    (S.EMPTY, None), (S.SOLVED_WITHOUT_MR, None), (S.WAITING, None),
-    (S.CHANGES, False), (S.FAILED, False), (S.ACCEPTED, True),
+    (S.EMPTY, None), (S.SOLVED_WITHOUT_MR, None), (S.READY_TO_BE_CHECKED, None),
+    (S.CHANGES_REQUESTED, False), (S.FAILED, False), (S.ACCEPTED, True),
 ])
 def test_web_status(status, expected):
     from manytask.web import format_review_status

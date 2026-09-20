@@ -15,6 +15,19 @@ review can accept a task; acceptance and oral-limit failure are terminal.
 Requesting another oral round after that many attempts fails permanently;
 written review is still allowed after the last permitted oral attempt.
 
+## Transition rules in code
+
+`ReviewStatus.READY_TO_BE_CHECKED` (`?`) means that the selected stage is ready
+for a reviewer; `CHANGES_REQUESTED` (`-`) means that corrections are required
+before the next review. The stored markers remain unchanged.
+
+`transition` validates the input and dispatches by `ReviewEvent`. `_tests_passed`
+selects the next step by status, `_enter_review` handles each stage explicitly
+and increments its counter, and `_manual_review` applies the selected decision.
+Failed tests, repeated passing reports in the queue and terminal states preserve
+the state. Manual decisions require `READY_TO_BE_CHECKED` and never increment
+attempt counters.
+
 ## Application integration
 
 The main sheet is the source of review state. Each task occupies four columns:

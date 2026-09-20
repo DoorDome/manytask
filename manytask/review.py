@@ -11,8 +11,8 @@ class ReviewStage(str, Enum):
 class ReviewStatus(str, Enum):
     EMPTY = ""
     SOLVED_WITHOUT_MR = "#"
-    WAITING = "?"
-    CHANGES = "-"
+    READY_TO_BE_CHECKED = "?"
+    CHANGES_REQUESTED = "-"
     ACCEPTED = "+"
     FAILED = "failed"
 
@@ -73,7 +73,7 @@ class ReviewState:
         if status == ReviewStatus.SOLVED_WITHOUT_MR and (oral_count or written_count):
             raise ValueError("A solution without an MR cannot have review attempts")
         active_count = oral_count if stage == ReviewStage.ORAL else written_count
-        if status in (ReviewStatus.WAITING, ReviewStatus.ACCEPTED) and active_count == 0:
+        if status in (ReviewStatus.READY_TO_BE_CHECKED, ReviewStatus.ACCEPTED) and active_count == 0:
             raise ValueError("A reviewed stage must have at least one attempt")
         return cls(stage, status, oral_count, written_count)
 
@@ -89,29 +89,54 @@ def transition(
         raise ValueError("oral_attempt_limit must be a positive integer")
     if not isinstance(event, ReviewEvent):
         raise ValueError("Expected a ReviewEvent")
-    if event == ReviewEvent.TESTS_FAILED:
-        return state
-    if event == ReviewEvent.TESTS_PASSED:
-        first_review = state.status in (ReviewStatus.EMPTY, ReviewStatus.SOLVED_WITHOUT_MR)
-        if first_review and not has_merge_request:
-            return replace(state, status=ReviewStatus.SOLVED_WITHOUT_MR)
-        if not first_review and state.status != ReviewStatus.CHANGES:
+    match event:
+        case ReviewEvent.TESTS_FAILED:
             return state
-        stage = ReviewStage.ORAL if first_review else state.stage
-        if stage == ReviewStage.ORAL:
-            if state.oral_attempts >= oral_attempt_limit:
-                return replace(state, stage=stage, status=ReviewStatus.FAILED)
-            return replace(state, stage=stage, status=ReviewStatus.WAITING, oral_attempts=state.oral_attempts + 1)
-        return replace(state, status=ReviewStatus.WAITING, written_attempts=state.written_attempts + 1)
+        case ReviewEvent.TESTS_PASSED:
+            return _tests_passed(state, oral_attempt_limit, has_merge_request=has_merge_request)
+        case ReviewEvent.ACCEPT | ReviewEvent.CHANGES_ORAL | ReviewEvent.CHANGES_WRITTEN:
+            return _manual_review(state, event, oral_attempt_limit)
+    raise ValueError(f"Unsupported review event: {event!r}")
 
-    if state.status != ReviewStatus.WAITING:
+
+def _tests_passed(state: ReviewState, oral_attempt_limit: int, *, has_merge_request: bool) -> ReviewState:
+    match state.status:
+        case ReviewStatus.EMPTY | ReviewStatus.SOLVED_WITHOUT_MR:
+            if not has_merge_request:
+                return replace(state, status=ReviewStatus.SOLVED_WITHOUT_MR)
+            return _enter_review(replace(state, stage=ReviewStage.ORAL), oral_attempt_limit)
+        case ReviewStatus.CHANGES_REQUESTED:
+            return _enter_review(state, oral_attempt_limit)
+        case ReviewStatus.READY_TO_BE_CHECKED | ReviewStatus.ACCEPTED | ReviewStatus.FAILED:
+            return state
+    raise ValueError(f"Unsupported review status: {state.status!r}")
+
+
+def _enter_review(state: ReviewState, oral_attempt_limit: int) -> ReviewState:
+    """Count a new entry into the queue of the explicitly selected stage."""
+    match state.stage:
+        case ReviewStage.ORAL:
+            if state.oral_attempts >= oral_attempt_limit:
+                return replace(state, status=ReviewStatus.FAILED)
+            return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, oral_attempts=state.oral_attempts + 1)
+        case ReviewStage.WRITTEN:
+            return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, written_attempts=state.written_attempts + 1)
+    raise ValueError(f"Unsupported review stage: {state.stage!r}")
+
+
+def _manual_review(state: ReviewState, event: ReviewEvent, oral_attempt_limit: int) -> ReviewState:
+    if state.status != ReviewStatus.READY_TO_BE_CHECKED:
         raise ValueError("Manual review requires a task waiting for review (?)")
-    if event == ReviewEvent.ACCEPT:
-        if state.stage != ReviewStage.WRITTEN:
-            raise ValueError("Written review is mandatory before acceptance")
-        return replace(state, status=ReviewStatus.ACCEPTED)
-    stage = ReviewStage.ORAL if event == ReviewEvent.CHANGES_ORAL else ReviewStage.WRITTEN
-    status = ReviewStatus.CHANGES
-    if stage == ReviewStage.ORAL and state.oral_attempts >= oral_attempt_limit:
-        status = ReviewStatus.FAILED
-    return replace(state, stage=stage, status=status)
+    match event:
+        case ReviewEvent.ACCEPT:
+            if state.stage != ReviewStage.WRITTEN:
+                raise ValueError("Written review is mandatory before acceptance")
+            return replace(state, status=ReviewStatus.ACCEPTED)
+        case ReviewEvent.CHANGES_ORAL:
+            status = ReviewStatus.CHANGES_REQUESTED
+            if state.oral_attempts >= oral_attempt_limit:
+                status = ReviewStatus.FAILED
+            return replace(state, stage=ReviewStage.ORAL, status=status)
+        case ReviewEvent.CHANGES_WRITTEN:
+            return replace(state, stage=ReviewStage.WRITTEN, status=ReviewStatus.CHANGES_REQUESTED)
+    raise ValueError(f"Unsupported manual review event: {event!r}")
