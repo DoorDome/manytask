@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AnyUrl, BaseModel, Field, field_validator, model_validator
 
+from .review import DEFAULT_REVIEW_STAGES, ReviewStage
+
 
 class ManytaskSettingsConfig(BaseModel):
     """Manytask settings."""
@@ -38,6 +40,7 @@ class ManytaskDeadlinesType(Enum):
 
 class ManytaskTaskConfig(BaseModel):
     task: str
+    review_stages: tuple[ReviewStage, ...] = Field(default=DEFAULT_REVIEW_STAGES, min_length=1, max_length=2)
 
     enabled: bool = True
 
@@ -49,6 +52,13 @@ class ManytaskTaskConfig(BaseModel):
 
     # Note: use Optional/Union[...] instead of ... | None as pydantic does not support | in older python versions
     url: Optional[AnyUrl] = None
+
+    @field_validator("review_stages")
+    @classmethod
+    def check_review_stages(cls, stages: tuple[ReviewStage, ...]) -> tuple[ReviewStage, ...]:
+        if len(set(stages)) != len(stages):
+            raise ValueError("Review stages must be unique")
+        return stages
 
     @property
     def name(self) -> str:

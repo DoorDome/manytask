@@ -32,9 +32,17 @@ def student(username='alice'):
 class Workbook:
     def __init__(self):
         self.sheets = {}
+        self.fetch_sheet_metadata = Mock(side_effect=self._fetch_sheet_metadata)
         self.batch_update = Mock(side_effect=self._batch_update)
         self.worksheet = Mock(side_effect=self._worksheet)
         self.add_worksheet = Mock(side_effect=self._add_worksheet)
+
+    def _fetch_sheet_metadata(self, params=None):
+        return {'sheets': [
+            {'properties': {'sheetId': sheet.id}, 'data': [{'startColumn': 0, 'columnMetadata': [
+                {'hiddenByUser': column in sheet.hidden_columns} for column in range(sheet.col_count)
+            ]}]} for sheet in self.sheets.values()
+        ]}
 
     def _worksheet(self, title):
         if title not in self.sheets:
@@ -68,7 +76,22 @@ class Workbook:
                     row[start:start] = [''] * width
                 sheet.formats = {(row, col + width if col >= start else col): fmt
                                  for (row, col), fmt in sheet.formats.items()}
+                inherited_hidden = start - 1 in sheet.hidden_columns
+                sheet.hidden_columns = {col + width if col >= start else col for col in sheet.hidden_columns}
+                if inherited_hidden:
+                    sheet.hidden_columns.update(range(start, end))
                 sheet.col_count += width
+            elif 'updateDimensionProperties' in request:
+                update = request['updateDimensionProperties']
+                bounds = update['range']
+                assert bounds['dimension'] == 'COLUMNS'
+                assert update['fields'] == 'hiddenByUser'
+                sheet = next(s for s in self.sheets.values() if s.id == bounds['sheetId'])
+                columns = set(range(bounds['startIndex'], bounds['endIndex']))
+                if update['properties']['hiddenByUser']:
+                    sheet.hidden_columns.update(columns)
+                else:
+                    sheet.hidden_columns.difference_update(columns)
             elif 'repeatCell' in request:
                 bounds = request['repeatCell']['range']
                 sheet = next(s for s in self.sheets.values() if s.id == bounds['sheetId'])
@@ -91,6 +114,7 @@ class Sheet:
         self.spreadsheet, self.title, self.id = spreadsheet, title, sheet_id
         self.rows = []
         self.formats = {}
+        self.hidden_columns = set()
         self.row_count, self.col_count = rows, cols
         self.format = Mock()
         self.update_cells = Mock(side_effect=self._update_cells)

@@ -10,12 +10,12 @@ from typing import Any, Callable, Iterable
 
 import gspread
 from cachelib import BaseCache
-from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol
+from gspread.utils import ValueInputOption, ValueRenderOption, a1_to_rowcol, absolute_range_name
 
 from .config import ManytaskConfig, ManytaskDeadlinesConfig
 from .course import get_current_time
 from .glab import Student
-from .review import ReviewEvent, ReviewState, ReviewStatus, transition
+from .review import DEFAULT_REVIEW_STAGES, ReviewEvent, ReviewStage, ReviewState, ReviewStatus, transition
 from .review_sheet import ReviewDetailsSheet
 from .spreadsheet import update_cells_request
 
@@ -301,6 +301,7 @@ class RatingTable:
         group_name: str,
         at: datetime,
         has_merge_request: bool = False,
+        review_stages: tuple[ReviewStage, ...] = DEFAULT_REVIEW_STAGES,
     ) -> SubmissionStatus:
         if at.utcoffset() is None:
             raise ValueError("Review timestamps must include a timezone")
@@ -311,7 +312,9 @@ class RatingTable:
         except LoginNotFound:
             row, values = None, []
         score, old_state, reviewer = self._read_task_values(values, column)
-        new_state = transition(old_state, event, oral_attempt_limit, has_merge_request=has_merge_request)
+        new_state = transition(
+            old_state, event, oral_attempt_limit, has_merge_request=has_merge_request, review_stages=review_stages,
+        )
         if event == ReviewEvent.TESTS_FAILED:
             return self.SubmissionStatus(score or 0, old_state.status.value, reviewer)
 
@@ -410,6 +413,21 @@ class RatingTable:
                     "cell": {"userEnteredFormat": formatting}, "fields": "userEnteredFormat",
                 }})
 
+        hidden_columns = self._hidden_columns() if existing_columns else set()
+        old_columns = {name: column for column, name in existing_columns}
+        for index, task in enumerate(tasks):
+            column_index = options.TASK_SCORES_START_COLUMN - 1 + index * options.COLUMNS_PER_TASK
+            if task.name not in old_columns:
+                # Inserted dimensions inherit visibility; reset the entire new block first.
+                requests.append(self._column_visibility_request(column_index, options.COLUMNS_PER_TASK, False))
+            for stage, offset in ((ReviewStage.ORAL, options.ORAL_OFFSET),
+                                  (ReviewStage.WRITTEN, options.WRITTEN_OFFSET)):
+                hidden = stage not in task.review_stages
+                was_hidden = (old_columns[task.name] - 1 + offset in hidden_columns
+                              if task.name in old_columns else False)
+                if hidden != was_hidden:
+                    requests.append(self._column_visibility_request(column_index + offset, 1, hidden))
+
         previous_group = None
         for index, name in enumerate(ordered):
             group = task_groups[name]
@@ -421,6 +439,25 @@ class RatingTable:
         if requests:
             # Sheets shifts existing cells, formulas and ranges; no old task block is rewritten.
             self.ws.spreadsheet.batch_update({"requests": requests})
+
+    def _hidden_columns(self) -> set[int]:
+        metadata = self.ws.spreadsheet.fetch_sheet_metadata(params={
+            "ranges": absolute_range_name(self.ws.title),
+            "fields": "sheets(properties(sheetId),data(startColumn,columnMetadata(hiddenByUser)))",
+        })
+        sheet = next(sheet for sheet in metadata["sheets"] if sheet["properties"]["sheetId"] == self.ws.id)
+        return {
+            block.get("startColumn", 0) + offset
+            for block in sheet.get("data", [])
+            for offset, column in enumerate(block.get("columnMetadata", []))
+            if column.get("hiddenByUser", False)
+        }
+
+    def _column_visibility_request(self, start: int, width: int, hidden: bool) -> dict[str, Any]:
+        return {"updateDimensionProperties": {
+            "range": {"sheetId": self.ws.id, "dimension": "COLUMNS", "startIndex": start, "endIndex": start + width},
+            "properties": {"hiddenByUser": hidden}, "fields": "hiddenByUser",
+        }}
 
     def _get_row_values(
         self,

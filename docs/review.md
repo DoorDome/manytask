@@ -1,19 +1,57 @@
-# Two-stage review
+# Configurable task review
 
 The review model in `manytask/review.py` is independent of Sheets and GitLab.
 `ReviewEvent.TESTS_PASSED` and `TESTS_FAILED` describe automatic results; only
 `approve`, `changes_oral` and `changes_written` are manual decisions.
 
 Passing tests first records solved-without-MR (`#`) unless the report supplies
-an MR. The first passing report with an MR starts oral review. A request for
+an MR. The first passing report with an MR starts the task's configured first stage. A request for
 changes selects the next stage; a later passing report enters that stage's
 review queue. Each entry into `?` increments only that stage's attempt counter.
-Repeated passing reports while waiting do not create attempts. Only written
-review can accept a task; acceptance and oral-limit failure are terminal.
+Repeated passing reports while waiting do not create attempts. Approval at either
+enabled stage accepts the task, including the first review. Acceptance and
+oral-limit failure are terminal.
 
 `deadlines.oral_attempt_limit` defaults to 3 and requires a positive integer.
 Requesting another oral round after that many attempts fails permanently;
-written review is still allowed after the last permitted oral attempt.
+written review, if enabled, is still allowed after the last permitted oral attempt.
+The limit is checked when requesting another oral round; queue entry does not
+recheck the limit if course settings changed after that decision.
+
+## Per-task pipeline
+
+Set `review_stages` on each task in the course YAML:
+
+```yaml
+tasks:
+  - task: oral_only
+    score: 10
+    review_stages: [oral]
+  - task: written_only
+    score: 10
+    review_stages: [written]
+  - task: either_start_oral
+    score: 10
+    review_stages: [oral, written]
+  - task: either_start_written
+    score: 10
+    review_stages: [written, oral]
+```
+
+The list must contain one or two distinct stages. Its first element selects the
+initial stage, not a mandatory sequence. One review is active at a time;
+`changes_oral` and `changes_written` select the next stage after corrections.
+Selecting a disabled stage returns HTTP 409 before sheet writes. `approve`
+accepts a task on either enabled stage; passing both stages is not required.
+Omitting the field enables both stages and starts with oral review. Unlike the
+previous behavior, this default also permits approval at the first oral review.
+The MR requirement applies to all pipelines, including oral-only tasks.
+
+Choose stages before starting reviews. Changing the first stage does not move
+an active review. If an active stage is disabled, successful submissions and
+manual decisions return 409 until the stage is re-enabled or the main-sheet
+state is explicitly resolved. Terminal results and historical counts are kept;
+no automatic migration or re-opening is performed.
 
 ## Transition rules in code
 
@@ -31,9 +69,10 @@ attempt counters.
 ## Application integration
 
 The main sheet is the source of review state. Each task occupies four columns:
-score, oral, written, reviewer. `#0 / 0` means solved without MR; `?N` marks the
+score, oral, written, reviewer. `#0` in the starting stage means solved without
+MR (`#0 / 0` for oral, `0 / #0` for written); `?N` marks the
 stage waiting for review, and `-N` the next stage after corrections. Inactive
-stages retain counts. Acceptance appears as `+N` in written review; terminal
+stages retain counts. Acceptance appears as `+N` in the stage that accepted; terminal
 failure appears as `gN / oN`. Empty new cells mean no review yet. New courses use
 this schema directly; no legacy sheet or cached-object migration is provided.
 
@@ -121,3 +160,24 @@ The summary sheet is not read or written during synchronization.
 Removing, reordering or moving existing tasks between groups is outside this
 operation: such configurations fail before any writes. The operation never
 rebuilds or shrinks the sheet to match a new configuration.
+
+
+## Review column visibility
+
+`sync_columns` keeps all four physical columns per task and hides only an unused
+review column with Google Sheets `updateDimensionProperties.hiddenByUser`.
+Enabling a stage again unhides its column. Existing values, counters, formulas
+and column positions are not rewritten by visibility updates. The task's score
+and reviewer columns remain available; a new block explicitly resets inherited
+visibility before hiding its unused stage. Synchronization reads current column
+metadata, so repeating it with unchanged configuration sends no write requests.
+Hiding is a Sheets UI setting, not access control; API reads still include the
+hidden columns. The web UI already displays a single aggregate review result.
+
+External formulas that detect acceptance only in the written column must also
+check the oral column for `+N`. Four-column offsets remain unchanged, but that
+old assumption about the acceptance marker no longer holds.
+
+The API supports this visibility operation; local tests cover request structure,
+insertion offsets and re-enabling stages. Live Sheets rendering is not tested.
+Reference: [Google Sheets dimension properties](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/sheets#DimensionProperties).
