@@ -31,6 +31,13 @@ class ReviewEvent(str, Enum):
 MANUAL_REVIEW_EVENTS = (ReviewEvent.ACCEPT, ReviewEvent.CHANGES_ORAL, ReviewEvent.CHANGES_WRITTEN)
 
 
+def parse_manual_review_action(request_type: str) -> ReviewEvent | None:
+    for event in MANUAL_REVIEW_EVENTS:
+        if event.value == request_type:
+            return event
+    return None
+
+
 @dataclass(frozen=True)
 class ReviewState:
     stage: ReviewStage = ReviewStage.ORAL
