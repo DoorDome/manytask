@@ -142,3 +142,92 @@ def test_invalid_task_layout_is_rejected_without_changes(filled_table, corruptio
         table.sync_columns(course_config([('first', ['a', 'b']), ('second', ['c', 'new'])]).deadlines)
     assert table.ws.rows == before
     table.ws.spreadsheet.batch_update.assert_not_called()
+
+
+def configure_stages(config, name, *stages):
+    from manytask.review import ReviewStage
+    config.deadlines.find_task(name)[1].review_stages = tuple(ReviewStage(stage) for stage in stages)
+
+
+def test_mixed_pipelines_hide_only_unused_columns_and_preserve_four_column_blocks():
+    workbook = Workbook()
+    ws = workbook.add_worksheet("main", rows=100, cols=3)
+    table = RatingTable(ws, SimpleCache())
+    config = course_config([('first', ['oral', 'written', 'both'])])
+    configure_stages(config, 'oral', 'oral')
+    configure_stages(config, 'written', 'written')
+    configure_stages(config, 'both', 'written', 'oral')
+    table.sync_columns(config.deadlines)
+    assert ws.col_count == 15
+    assert ws.hidden_columns == {5, 8}  # F: oral task's written; I: written task's oral.
+    assert [table._find_task_column(name) for name in ('oral', 'written', 'both')] == [4, 8, 12]
+    assert ws.rows[3][3:] == ['score', 'oral', 'written', 'reviewer'] * 3
+    workbook.batch_update.reset_mock()
+    table.sync_columns(config.deadlines)
+    workbook.batch_update.assert_not_called()
+
+
+def test_existing_pipeline_changes_only_visibility_and_can_unhide(filled_table):
+    table = filled_table
+    config = course_config([('first', ['a', 'b']), ('second', ['c'])])
+    configure_stages(config, 'a', 'oral')
+    configure_stages(config, 'b', 'written')
+    before = deepcopy(table.ws.rows)
+    width = table.ws.col_count
+    table.sync_columns(config.deadlines)
+    assert table.ws.hidden_columns == {5, 8}
+    assert table.ws.rows == before
+    assert table.ws.col_count == width
+    requests = table.ws.spreadsheet.batch_update.call_args.args[0]['requests']
+    assert all('updateDimensionProperties' in request for request in requests)
+    configure_stages(config, 'a', 'written', 'oral')
+    configure_stages(config, 'b', 'oral', 'written')
+    table.sync_columns(config.deadlines)
+    assert table.ws.hidden_columns == set()
+    assert table.ws.rows == before
+    table.ws.spreadsheet.batch_update.reset_mock()
+    table.sync_columns(config.deadlines)
+    table.ws.spreadsheet.batch_update.assert_not_called()
+
+
+def test_insertions_shift_hidden_columns_and_reset_inherited_visibility(filled_table):
+    table = filled_table
+    config = course_config([('first', ['a', 'b']), ('second', ['c'])])
+    configure_stages(config, 'a', 'oral')
+    configure_stages(config, 'b', 'written')
+    table.sync_columns(config.deadlines)
+    # Inserting after a manually hidden reviewer column must not hide a new task.
+    table.ws.hidden_columns.add(6)
+    before = snapshot_tasks(table)
+    config = course_config([('first', ['new1', 'a', 'new2', 'b']), ('second', ['c'])])
+    configure_stages(config, 'a', 'oral')
+    configure_stages(config, 'b', 'written')
+    configure_stages(config, 'new1', 'written')
+    table.sync_columns(config.deadlines)
+    assert table.ws.hidden_columns == {4, 9, 10, 16}
+    assert {name: snapshot_tasks(table)[name] for name in before} == before
+    assert table.ws.rows[4][-1] == '=SUM(D5:O5)'
+    table.ws.spreadsheet.batch_update.reset_mock()
+    table.sync_columns(config.deadlines)
+    table.ws.spreadsheet.batch_update.assert_not_called()
+
+
+def test_column_metadata_start_offset_and_other_sheets(filled_table):
+    table = filled_table
+    table.ws.hidden_columns = {5}
+    table.ws.spreadsheet.fetch_sheet_metadata.return_value = {
+        'sheets': [
+            {'properties': {'sheetId': 999}, 'data': [{'columnMetadata': [{'hiddenByUser': True}]}]},
+            {'properties': {'sheetId': table.ws.id}, 'data': [
+                {'startColumn': 4, 'columnMetadata': [{}, {'hiddenByUser': True}]},
+            ]},
+        ],
+    }
+    table.ws.spreadsheet.fetch_sheet_metadata.side_effect = None
+    config = course_config([('first', ['a', 'b']), ('second', ['c'])])
+    configure_stages(config, 'a', 'oral')
+    table.sync_columns(config.deadlines)
+    table.ws.spreadsheet.batch_update.assert_not_called()
+    params = table.ws.spreadsheet.fetch_sheet_metadata.call_args.kwargs['params']
+    assert params['ranges'] == "'main'"
+    assert 'columnMetadata(hiddenByUser)' in params['fields']

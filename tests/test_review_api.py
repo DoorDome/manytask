@@ -40,7 +40,6 @@ def test_api_end_to_end(api):
     assert report(api).json['review_status'] == '#'
     assert report(api, request_type='changes_written', reported_by='assistant').status_code == 409
     assert report(api, merge_request_iid='42').json['review_status'] == '?'
-    assert report(api, request_type='approve', reported_by='assistant').status_code == 409
     assert report(api, request_type='changes_written', reported_by='assistant').json['review_status'] == '-'
     assert report(api).json['review_status'] == '?'
     assert report(api, request_type='approve', reported_by='assistant').json['review_status'] == '+'
@@ -126,3 +125,49 @@ def test_api_preserves_instants_and_uses_server_time_for_manual_review(api, monk
     values = dict(zip(REVIEW_DETAILS_COLUMNS, row))
     assert values['first_successful_submission_at'] == '2026-01-01 00:00:00+00:00'
     assert values['last_oral_review_at'] == now.isoformat(sep=' ')
+
+
+@pytest.mark.parametrize('stages,first,accepted', [
+    (['oral'], ['?1', '0'], ['+1', '0']),
+    (['written'], ['0', '?1'], ['0', '+1']),
+    (['oral', 'written'], ['?1', '0'], ['+1', '0']),
+    (['written', 'oral'], ['0', '?1'], ['0', '+1']),
+])
+def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepted):
+    from manytask.review import ReviewStage, ReviewStatus
+    from manytask.review_sheet import REVIEW_DETAILS_COLUMNS
+    course = api[1]
+    task = course.deadlines.find_task('task')[1]
+    task.review_stages = tuple(ReviewStage(stage) for stage in stages)
+    assert report(api).json['review_status'] == '#'
+    assert course.rating_table.ws.rows[4][4:6] == (['#0', '0'] if stages[0] == 'oral' else ['0', '#0'])
+    assert report(api, merge_request_iid='42').status_code == 200
+    assert course.rating_table.ws.rows[4][4:6] == first
+    assert report(api, request_type='approve', reported_by='assistant').json['review_status'] == '+'
+    assert course.rating_table.ws.rows[4][4:6] == accepted
+    course.rating_table._cache.set('__config__', course.config.model_dump())
+    course.rating_table.update_cached_scores()
+    assert course.rating_table.get_reviews('alice')['task'] == ReviewStatus.ACCEPTED
+    summary = course.rating_table.ws.spreadsheet.worksheet('review_details')
+    values = dict(zip(REVIEW_DETAILS_COLUMNS, summary.rows[1]))
+    assert values['stage'] == stages[0]
+    assert values['status'] == '+'
+    assert values[f'last_{stages[0]}_review_at']
+    other = 'written' if stages[0] == 'oral' else 'oral'
+    assert values[f'last_{other}_review_at'] == ''
+    # A neighboring task still uses its own default pipeline.
+    assert report(api, task='other', merge_request_iid='43').status_code == 200
+    assert course.rating_table.ws.rows[4][8:10] == ['?1', '0']
+
+
+@pytest.mark.parametrize('stage,forbidden', [('oral', 'changes_written'), ('written', 'changes_oral')])
+def test_disabled_stage_api_error_has_no_writes(api, stage, forbidden):
+    from manytask.review import ReviewStage
+    api[1].deadlines.find_task('task')[1].review_stages = (ReviewStage(stage),)
+    assert report(api, merge_request_iid='42').status_code == 200
+    workbook = api[1].rating_table.ws.spreadsheet
+    workbook.batch_update.reset_mock()
+    result = report(api, request_type=forbidden, reported_by='assistant')
+    assert result.status_code == 409
+    assert 'disabled' in result.text
+    workbook.batch_update.assert_not_called()
