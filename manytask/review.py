@@ -116,8 +116,8 @@ def _enter_review(state: ReviewState, oral_attempt_limit: int) -> ReviewState:
     """Count a new entry into the queue of the explicitly selected stage."""
     match state.stage:
         case ReviewStage.ORAL:
-            if state.oral_attempts >= oral_attempt_limit:
-                return replace(state, status=ReviewStatus.FAILED)
+            # if state.oral_attempts >= oral_attempt_limit:
+            #     return replace(state, status=ReviewStatus.FAILED)
             return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, oral_attempts=state.oral_attempts + 1)
         case ReviewStage.WRITTEN:
             return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, written_attempts=state.written_attempts + 1)
