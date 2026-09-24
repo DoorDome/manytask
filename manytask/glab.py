@@ -268,7 +268,7 @@ class GitLabApi:
     def list_reviewers(
         self
     ) -> list[str]:
-        course_group = self._get_group_by_name(self._course_group)
+        course_group = self._get_group_by_name(self._course_students_group)
         reviewers = []
         for member in course_group.members.list(iterator=True):
             if "_bot_" in member.username:
