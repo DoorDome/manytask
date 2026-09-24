@@ -268,9 +268,9 @@ class GitLabApi:
     def list_reviewers(
         self
     ) -> list[str]:
-        course_group = self._get_group_by_name(self._course_group)
+        course_students_group = self._get_group_by_name(self._course_students_group)
         reviewers = []
-        for member in course_group.members.list(iterator=True):
+        for member in course_students_group.members.list(iterator=True):
             if "_bot_" in member.username:
                 continue
             if member.access_level == gitlab.const.AccessLevel.MAINTAINER:
@@ -282,9 +282,9 @@ class GitLabApi:
         self,
         student: Student,
     ) -> None:
-        course_group = self._get_group_by_name(self._course_group)
+        course_students_group = self._get_group_by_name(self._course_students_group)
         try:
-            member = course_group.members.create(
+            member = course_students_group.members.create(
                 {
                     "user_id": student.id,
                     "access_level": gitlab.const.AccessLevel.MAINTAINER,
@@ -298,9 +298,9 @@ class GitLabApi:
         self,
         student: Student,
     ) -> bool:
-        course_group = self._get_group_by_name(self._course_group)
+        course_students_group = self._get_group_by_name(self._course_students_group)
         try:
-            member = course_group.members.get(student.id)
+            member = course_students_group.members.get(student.id)
             return member._attrs["access_level"] >= gitlab.const.AccessLevel.MAINTAINER
         except gitlab.GitlabGetError:
             logger.info(f"Cannot get user with id {student.id} from group {self._course_students_group}")
