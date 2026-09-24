@@ -37,7 +37,7 @@ def validate_submit_time(commit_time: datetime | None, current_time: datetime) -
     return current_time
 
 
-from . import config, gdoc, glab, solutions  # noqa: E402, F401
+from . import config, gdoc, glab, rating_table, solutions  # noqa: E402, F401
 
 
 class Course:
@@ -84,6 +84,8 @@ class Course:
         assert self.config is not None, "Config is not ready, we should never fetch deadlines without config"
         return self.config.deadlines
 
+
+    # what for? soon to be deprecated 
     @property
     def deadlines_cache_time(self) -> datetime:
         return self._cache.get("__deadlines_cache_time__")
@@ -105,5 +107,5 @@ class Course:
         self._cache.set("__config__", content)
 
     @property
-    def rating_table(self) -> "gdoc.RatingTable":
+    def rating_table(self) -> "rating_table.RatingTable":
         return self.googledoc_api.fetch_rating_table()

@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AnyUrl, BaseModel, Field, field_validator, model_validator
 
+from .review import DEFAULT_REVIEW_STAGES, ReviewStage
+
 
 class ManytaskSettingsConfig(BaseModel):
     """Manytask settings."""
@@ -24,8 +26,8 @@ class ManytaskUiConfig(BaseModel):
     @field_validator("task_url_template")
     @classmethod
     def check_task_url_template(cls, data: str | None) -> str | None:
-        if data is not None and (not data.startswith("http://") and not data.startswith("https://")):
-            raise ValueError("task_url_template should be http or https")
+        if data is not None and (not data.startswith("https://")):
+            raise ValueError("task_url_template should behttps")
         # if data is not None and "$GROUP_NAME" not in data and "$TASK_NAME" not in data:
         #     raise ValueError("task_url should contain at least one of $GROUP_NAME and $TASK_NAME vars")
         return data
@@ -38,6 +40,7 @@ class ManytaskDeadlinesType(Enum):
 
 class ManytaskTaskConfig(BaseModel):
     task: str
+    review_stages: tuple[ReviewStage, ...] = Field(default=DEFAULT_REVIEW_STAGES, min_length=1, max_length=2)
 
     enabled: bool = True
 
@@ -49,6 +52,13 @@ class ManytaskTaskConfig(BaseModel):
 
     # Note: use Optional/Union[...] instead of ... | None as pydantic does not support | in older python versions
     url: Optional[AnyUrl] = None
+
+    @field_validator("review_stages")
+    @classmethod
+    def check_review_stages(cls, stages: tuple[ReviewStage, ...]) -> tuple[ReviewStage, ...]:
+        if len(set(stages)) != len(stages):
+            raise ValueError("Review stages must be unique")
+        return stages
 
     @property
     def name(self) -> str:
@@ -129,6 +139,7 @@ class ManytaskDeadlinesConfig(BaseModel):
     deadlines: ManytaskDeadlinesType = ManytaskDeadlinesType.HARD
     max_submissions: Optional[int] = None
     submission_penalty: float = 0
+    oral_attempt_limit: int = Field(default=3, gt=0, strict=True)
 
     schedule: list[ManytaskGroupConfig]  # list of groups with tasks
 
@@ -296,39 +307,3 @@ class ManytaskConfig(BaseModel):
         if data != 1:
             raise ValueError(f"Only version 1 is supported for {cls.__name__}")
         return data
-
-class TaskReviewStatus(Enum):
-    ACCEPTED = "+"
-    REJECTED = "-"
-    SOLVED = "#"
-    SOLVED_WITH_MR = "?"
-
-    @staticmethod
-    def is_review_status(status: TaskReviewStatus) -> bool:
-        return status in [TaskReviewStatus.ACCEPTED, TaskReviewStatus.REJECTED]
-    
-    @staticmethod
-    def from_string(string: str) -> TaskReviewStatus:
-        result = TaskReviewStatus._value2member_map_.get(string, None)
-        if result is None:
-            raise ValueError(f"Cannot convert string {string} to review status")
-        return result
-     
-class TaskReviewInfo: 
-    def __init__(self, status: TaskReviewStatus, bad_attempts: int):
-        self.status = status
-        self.bad_attempts = bad_attempts
-
-    @staticmethod
-    def from_string(string: str) -> TaskReviewInfo:
-        if len(string) == 0:
-            return TaskReviewInfo(TaskReviewStatus.SOLVED, 0)
-        
-        status = TaskReviewStatus.from_string(string[0])
-        try:
-            bad_attempts = int(string[1:]) if string[1:] else 0
-        except ValueError:
-            raise ValueError(f"Cannot convert string {string} to review info")
-
-        return TaskReviewInfo(status, bad_attempts)
-
