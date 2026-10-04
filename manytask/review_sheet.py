@@ -59,17 +59,6 @@ class ReviewDetailsSheet:
         except gspread.WorksheetNotFound:
             self.ws = spreadsheet.add_worksheet(REVIEW_DETAILS_SHEET, rows=1000, cols=len(REVIEW_DETAILS_COLUMNS))
         header = self.ws.row_values(1)
-        legacy_header = tuple(name.replace("codereview_attempts", "written_attempts")
-                             .replace("last_codereview_at", "last_written_review_at")
-                             for name in REVIEW_DETAILS_COLUMNS)
-        if tuple(header) == legacy_header:
-            requests = [update_cells_request(self.ws.id, 1, 1, list(REVIEW_DETAILS_COLUMNS))]
-            stage_column = REVIEW_DETAILS_COLUMNS.index("stage") + 1
-            for row, values in enumerate(self.ws.get_values()[1:], 2):
-                if len(values) >= stage_column and values[stage_column - 1] == "written":
-                    requests.append(update_cells_request(self.ws.id, row, stage_column, ["codereview"]))
-            self.spreadsheet.batch_update({"requests": requests})
-            header = list(REVIEW_DETAILS_COLUMNS)
         if not header:
             self.ws.update_cells([gspread.Cell(1, column, name)
                                   for column, name in enumerate(REVIEW_DETAILS_COLUMNS, 1)])

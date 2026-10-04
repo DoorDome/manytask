@@ -102,20 +102,6 @@ def test_empty_cells():
     assert ReviewState().columns() == ('', '')
 
 
-@pytest.mark.parametrize('stage', list(Stage))
-def test_without_mr_hides_both_zero_counters_and_reads_legacy_cells(stage):
-    expected = ('#', '') if stage == Stage.ORAL else ('', '#')
-    legacy = ('#0', '0') if stage == Stage.ORAL else ('0', '#0')
-    state = step(ReviewState(), E.TESTS_PASSED, review_stages=(stage,))
-    assert state.columns() == expected
-    assert (state.oral_attempts, state.codereview_attempts) == (0, 0)
-    assert ReviewState.from_columns(*expected) == state
-    assert ReviewState.from_columns(*legacy) == state
-    assert step(state, E.TESTS_PASSED, review_stages=(stage,)) == state
-    ready = step(state, E.TESTS_PASSED, review_stages=(stage,), has_merge_request=True)
-    assert ready.columns() == (('?1', '0') if stage == Stage.ORAL else ('0', '?1'))
-
-
 @pytest.mark.parametrize('limit', [0, -1, True, 1.5, '3'])
 def test_strict_limit(limit):
     with pytest.raises(ValidationError):

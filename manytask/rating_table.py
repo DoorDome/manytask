@@ -427,17 +427,8 @@ class RatingTable:
 
         hidden_columns = self._hidden_columns() if existing_columns else set()
         old_columns = {name: column for column, name in existing_columns}
-        subheaders = self.ws.row_values(options.SUBHEADER_ROW)
         for index, task in enumerate(tasks):
             column_index = options.TASK_SCORES_START_COLUMN - 1 + index * options.COLUMNS_PER_TASK
-            old_column = old_columns.get(task.name)
-            if old_column is not None:
-                old_review_index = old_column - 1 + options.CODEREVIEW_OFFSET
-                if old_review_index < len(subheaders) and subheaders[old_review_index] == "written":
-                    requests.append(update_cells_request(
-                        self.ws.id, options.SUBHEADER_ROW,
-                        column_index + options.CODEREVIEW_OFFSET + 1, ["code review"],
-                    ))
             if task.name not in old_columns:
                 # Inserted dimensions inherit visibility; reset the entire new block first.
                 requests.append(self._column_visibility_request(column_index, options.COLUMNS_PER_TASK, False))
