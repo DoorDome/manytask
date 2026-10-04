@@ -14,6 +14,21 @@ def dates_row(table):
     return dict(zip(REVIEW_DETAILS_COLUMNS, table.ws.spreadsheet.worksheet('review_details').rows[1]))
 
 
+def test_legacy_summary_schema_is_migrated_without_losing_data(table):
+    submit(table, has_merge_request=True)
+    submit(table, E.CHANGES_WRITTEN)
+    details = table.ws.spreadsheet.worksheet('review_details')
+    before = deepcopy(details.rows)
+    details.rows[0] = [name.replace('code_review_attempts', 'written_attempts')
+                      .replace('last_code_review_at', 'last_written_review_at') for name in details.rows[0]]
+    details.rows[1][9] = 'written'
+    ReviewDetailsSheet(table.ws.spreadsheet)
+    assert details.rows == before
+    table.ws.spreadsheet.batch_update.reset_mock()
+    ReviewDetailsSheet(table.ws.spreadsheet)
+    table.ws.spreadsheet.batch_update.assert_not_called()
+
+
 def store_at(table, event, at):
     return table.store_score(student(), 'task', lambda _: 10, event,
                              oral_attempt_limit=3, group_name='group', at=at, has_merge_request=True)
@@ -26,11 +41,11 @@ def test_dates_follow_completed_stage_and_submission_time(table):
     store_at(table, E.TESTS_PASSED, later)
     store_at(table, E.CHANGES_WRITTEN, later + timedelta(minutes=1))
     assert dates_row(table)['last_oral_review_at'] == (later + timedelta(minutes=1)).isoformat(sep=' ')
-    assert dates_row(table)['last_written_review_at'] == ''
+    assert dates_row(table)['last_code_review_at'] == ''
     store_at(table, E.TESTS_PASSED, later + timedelta(minutes=2))
     store_at(table, E.ACCEPT, later + timedelta(minutes=3))
     saved = dates_row(table)
-    assert saved['last_written_review_at'] == (later + timedelta(minutes=3)).isoformat(sep=' ')
+    assert saved['last_code_review_at'] == (later + timedelta(minutes=3)).isoformat(sep=' ')
     assert saved['first_successful_submission_at'] == NOW.isoformat(sep=' ')
     store_at(table, E.TESTS_PASSED, NOW - timedelta(days=1))
     assert dates_row(table)['first_successful_submission_at'] == saved['first_successful_submission_at']
@@ -46,7 +61,7 @@ def test_stale_summary_never_controls_transition(table):
         details.rows[1][index] = 'corrupt'
     assert submit(table, E.CHANGES_WRITTEN).review == '-'
     assert table.ws.rows[4][4:6] == ['1', '-0']
-    assert dates_row(table)['stage'] == 'written'
+    assert dates_row(table)['stage'] == 'code_review'
     assert dates_row(table)['oral_attempts'] == '1'
     assert dates_row(table)['last_oral_review_at'] == NOW.isoformat(sep=' ')
 

@@ -14,7 +14,7 @@ oral-limit failure are terminal.
 
 `deadlines.oral_attempt_limit` defaults to 3 and requires a positive integer.
 Requesting another oral round after that many attempts fails permanently;
-written review, if enabled, is still allowed after the last permitted oral attempt.
+code review, if enabled, is still allowed after the last permitted oral attempt.
 The limit is checked when requesting another oral round; queue entry does not
 recheck the limit if course settings changed after that decision.
 
@@ -27,15 +27,15 @@ tasks:
   - task: oral_only
     score: 10
     review_stages: [oral]
-  - task: written_only
+  - task: code_review_only
     score: 10
-    review_stages: [written]
+    review_stages: [code_review]
   - task: either_start_oral
     score: 10
-    review_stages: [oral, written]
-  - task: either_start_written
+    review_stages: [oral, code_review]
+  - task: either_start_code_review
     score: 10
-    review_stages: [written, oral]
+    review_stages: [code_review, oral]
 ```
 
 The list must contain one or two distinct stages. Its first element selects the
@@ -69,11 +69,11 @@ attempt counters.
 ## Application integration
 
 The main sheet is the source of review state. Each task occupies four columns:
-score, oral, written, reviewer. `#0` in the starting stage means solved without
-MR (`#0 / 0` for oral, `0 / #0` for written); `?N` marks the
+score, oral, code review, reviewer. `#0` in the starting stage means solved without
+MR (`#0 / 0` for oral, `0 / #0` for code review); `?N` marks the
 stage waiting for review, and `-N` the next stage after corrections. Inactive
 stages retain counts. Acceptance appears as `+N` in the stage that accepted; terminal
-failure appears as `gN / oN`. Empty new cells mean no review yet. New courses use
+failure appears as `fN / fM` (legacy `gN / oM` is still readable). Empty new cells mean no review yet. New courses use
 this schema directly; no legacy sheet or cached-object migration is provided.
 
 The API and web cache share `ReviewStatus`. Every report reads the main sheet
@@ -122,7 +122,7 @@ Offline tests do not establish that the external CI has been deployed.
 
 ```text
 login, task, group, oral_attempts, last_oral_review_at,
-written_attempts, last_written_review_at, first_successful_submission_at,
+code_review_attempts, last_code_review_at, first_successful_submission_at,
 last_successful_submission_at, stage, status
 ```
 
@@ -174,10 +174,19 @@ metadata, so repeating it with unchanged configuration sends no write requests.
 Hiding is a Sheets UI setting, not access control; API reads still include the
 hidden columns. The web UI already displays a single aggregate review result.
 
-External formulas that detect acceptance only in the written column must also
+External formulas that detect acceptance only in the code review column must also
 check the oral column for `+N`. Four-column offsets remain unchanged, but that
 old assumption about the acceptance marker no longer holds.
 
 The API supports this visibility operation; local tests cover request structure,
 insertion offsets and re-enabling stages. Live Sheets rendering is not tested.
 Reference: [Google Sheets dimension properties](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/sheets#DimensionProperties).
+
+
+## Renaming written review
+
+Use `code_review` in `review_stages`; the public column is named `code review`.
+Update course YAML before deploying this version. The exact legacy
+`review_details` header is migrated automatically, including `written` stage
+values, without changing counts or timestamps. Unknown schemas are rejected.
+Sheet synchronization renames existing `written` subheaders in place.

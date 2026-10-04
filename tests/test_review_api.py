@@ -89,7 +89,7 @@ def test_oral_limit_in_api(api):
     assert report(api, merge_request_iid='12').json['review_status'] == '?'
     assert report(api, request_type='changes_oral', reported_by='assistant').json['review_status'] == 'failed'
     assert report(api).json['review_status'] == 'failed'
-    assert api[1].rating_table.ws.rows[4][4:6] == ['g1', 'o0']
+    assert api[1].rating_table.ws.rows[4][4:6] == ['f1', 'f0']
 
 
 def test_ci_exposes_exactly_three_manual_actions():
@@ -129,9 +129,9 @@ def test_api_preserves_instants_and_uses_server_time_for_manual_review(api, monk
 
 @pytest.mark.parametrize('stages,first,accepted', [
     (['oral'], ['?1', '0'], ['+1', '0']),
-    (['written'], ['0', '?1'], ['0', '+1']),
-    (['oral', 'written'], ['?1', '0'], ['+1', '0']),
-    (['written', 'oral'], ['0', '?1'], ['0', '+1']),
+    (['code_review'], ['0', '?1'], ['0', '+1']),
+    (['oral', 'code_review'], ['?1', '0'], ['+1', '0']),
+    (['code_review', 'oral'], ['0', '?1'], ['0', '+1']),
 ])
 def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepted):
     from manytask.review import ReviewStage, ReviewStatus
@@ -152,15 +152,15 @@ def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepte
     values = dict(zip(REVIEW_DETAILS_COLUMNS, summary.rows[1]))
     assert values['stage'] == stages[0]
     assert values['status'] == '+'
-    assert values[f'last_{stages[0]}_review_at']
-    other = 'written' if stages[0] == 'oral' else 'oral'
-    assert values[f'last_{other}_review_at'] == ''
+    assert values['last_oral_review_at' if stages[0] == 'oral' else 'last_code_review_at']
+    other = 'code_review' if stages[0] == 'oral' else 'oral'
+    assert values['last_oral_review_at' if other == 'oral' else 'last_code_review_at'] == ''
     # A neighboring task still uses its own default pipeline.
     assert report(api, task='other', merge_request_iid='43').status_code == 200
     assert course.rating_table.ws.rows[4][8:10] == ['?1', '0']
 
 
-@pytest.mark.parametrize('stage,forbidden', [('oral', 'changes_written'), ('written', 'changes_oral')])
+@pytest.mark.parametrize('stage,forbidden', [('oral', 'changes_written'), ('code_review', 'changes_oral')])
 def test_disabled_stage_api_error_has_no_writes(api, stage, forbidden):
     from manytask.review import ReviewStage
     api[1].deadlines.find_task('task')[1].review_stages = (ReviewStage(stage),)
