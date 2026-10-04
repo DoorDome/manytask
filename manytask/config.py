@@ -312,7 +312,7 @@ class TaskReviewStatus(Enum):
         result = TaskReviewStatus._value2member_map_.get(string, None)
         if result is None:
             raise ValueError(f"Cannot convert string {string} to review status")
-        return result
+        return TaskReviewStatus(result)
      
 class TaskReviewInfo: 
     def __init__(self, status: TaskReviewStatus, bad_attempts: int):
