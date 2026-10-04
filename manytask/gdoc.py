@@ -69,7 +69,7 @@ class PublicAccountsSheetOptions:
     SUBHEADER_ROW: int = 4
     STUDENTS_START_ROW: int = 5
 
-    GITLAB_COLUMN: int = 1
+    GIT_COLUMN: int = 1
     LOGIN_COLUMN: int = 2
     NAME_COLUMN: int = 3
     TASK_SCORES_START_COLUMN: int = 4
@@ -539,7 +539,7 @@ class RatingTable:
         TASKS_RANGE: str = f'INDIRECT(ADDRESS(ROW(), {PublicAccountsSheetOptions.TASK_SCORES_START_COLUMN}) & ":" & ROW())'
 
         column_to_values_dict = {
-            PublicAccountsSheetOptions.GITLAB_COLUMN: self.create_student_repo_link(student),
+            PublicAccountsSheetOptions.GIT_COLUMN: self.create_student_repo_link(student),
             PublicAccountsSheetOptions.LOGIN_COLUMN: student.username,
             PublicAccountsSheetOptions.NAME_COLUMN: student.name,
         }
