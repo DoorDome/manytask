@@ -347,6 +347,8 @@ class RatingTable:
         update_fn: Callable[..., Any],
         review: TaskReviewStatus,
     ) -> SubmissionStatus:
+        
+        # --- store in gdoc ---
         try:
             student_row = self._find_login_row(student.username)
         except LoginNotFound:
@@ -384,6 +386,7 @@ class RatingTable:
             else:
                 logger.warning("No reviewers found")
         
+        # --- store in cache ---
         tasks = self._list_tasks(with_index=False)
         scores = self._get_row_values(
             student_row,
