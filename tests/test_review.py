@@ -14,7 +14,7 @@ def step(state, event, **kwargs):
 
 def test_complete_review_with_return_to_oral():
     state = step(ReviewState(), E.TESTS_PASSED)
-    assert state.columns() == ('#0', '0')
+    assert state.columns() == ('#', '')
     assert step(state, E.TESTS_PASSED) == state
     state = step(state, E.TESTS_PASSED, has_merge_request=True)
     assert state.columns() == ('?1', '0')
@@ -99,6 +99,21 @@ def test_invalid_columns(oral, code_review):
 
 def test_empty_cells():
     assert ReviewState.from_columns('', '') == ReviewState()
+    assert ReviewState().columns() == ('', '')
+
+
+@pytest.mark.parametrize('stage', list(Stage))
+def test_without_mr_hides_both_zero_counters_and_reads_legacy_cells(stage):
+    expected = ('#', '') if stage == Stage.ORAL else ('', '#')
+    legacy = ('#0', '0') if stage == Stage.ORAL else ('0', '#0')
+    state = step(ReviewState(), E.TESTS_PASSED, review_stages=(stage,))
+    assert state.columns() == expected
+    assert (state.oral_attempts, state.code_review_attempts) == (0, 0)
+    assert ReviewState.from_columns(*expected) == state
+    assert ReviewState.from_columns(*legacy) == state
+    assert step(state, E.TESTS_PASSED, review_stages=(stage,)) == state
+    ready = step(state, E.TESTS_PASSED, review_stages=(stage,), has_merge_request=True)
+    assert ready.columns() == (('?1', '0') if stage == Stage.ORAL else ('0', '?1'))
 
 
 @pytest.mark.parametrize('limit', [0, -1, True, 1.5, '3'])

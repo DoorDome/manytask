@@ -34,7 +34,7 @@ def submit(table, event=E.TESTS_PASSED, **kwargs):
 def test_fresh_course_schema_and_complete_workflow(table):
     assert table.ws.row_values(4)[3:] == ['score', 'oral', 'code review', 'reviewer'] * 2
     assert submit(table).review == '#'
-    assert table.ws.rows[4][4:6] == ['#0', '0']
+    assert table.ws.rows[4][4:6] == ['#', '']
     assert submit(table, has_merge_request=True).review == '?'
     assert submit(table, E.REQUEST_CODE_REVIEW).review == '-'
     assert submit(table).review == '?'

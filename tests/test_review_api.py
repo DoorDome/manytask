@@ -145,7 +145,7 @@ def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepte
     task = course.deadlines.find_task('task')[1]
     task.review_stages = tuple(ReviewStage(stage) for stage in stages)
     assert report(api).json['review_status'] == '#'
-    assert course.rating_table.ws.rows[4][4:6] == (['#0', '0'] if stages[0] == 'oral' else ['0', '#0'])
+    assert course.rating_table.ws.rows[4][4:6] == (['#', ''] if stages[0] == 'oral' else ['', '#'])
     assert report(api, merge_request_iid='42').status_code == 200
     assert course.rating_table.ws.rows[4][4:6] == first
     assert report(api, request_type='accept', reported_by='assistant').json['review_status'] == '+'

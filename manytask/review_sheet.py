@@ -4,7 +4,7 @@ from typing import Any
 
 import gspread
 
-from .review import MANUAL_REVIEW_EVENTS, ReviewEvent, ReviewStage, ReviewState
+from .review import MANUAL_REVIEW_EVENTS, ReviewEvent, ReviewStage, ReviewState, ReviewStatus
 from .spreadsheet import update_cells_request
 
 
@@ -95,8 +95,10 @@ class ReviewDetailsSheet:
     def write_requests(
         self, row: int, login: str, task: str, group: str, state: ReviewState, dates: ReviewTimestamps,
     ) -> list[dict[str, Any]]:
-        values = [login, task, group, state.oral_attempts, format_timestamp(dates.last_oral_review_at),
-                  state.code_review_attempts, format_timestamp(dates.last_code_review_at),
+        show_attempts = state.status not in (ReviewStatus.EMPTY, ReviewStatus.SOLVED_WITHOUT_MR)
+        values = [login, task, group, state.oral_attempts if show_attempts else "",
+                  format_timestamp(dates.last_oral_review_at),
+                  state.code_review_attempts if show_attempts else "", format_timestamp(dates.last_code_review_at),
                   format_timestamp(dates.first_successful_submission_at),
                   format_timestamp(dates.last_successful_submission_at), state.stage.value, state.status.value]
         requests: list[dict[str, Any]] = []

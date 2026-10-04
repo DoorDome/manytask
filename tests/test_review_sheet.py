@@ -36,6 +36,8 @@ def store_at(table, event, at):
 
 def test_dates_follow_completed_stage_and_submission_time(table):
     submit(table)  # first successful submission precedes the MR
+    assert dates_row(table)['oral_attempts'] == ''
+    assert dates_row(table)['code_review_attempts'] == ''
     assert dates_row(table)['first_successful_submission_at'] == NOW.isoformat(sep=' ')
     later = NOW + timedelta(hours=1)
     store_at(table, E.TESTS_PASSED, later)

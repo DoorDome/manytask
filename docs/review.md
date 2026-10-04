@@ -60,24 +60,28 @@ no automatic migration or re-opening is performed.
 
 `ReviewStatus.READY_TO_BE_CHECKED` (`?`) means that the selected stage is ready
 for a reviewer; `CHANGES_REQUESTED` (`-`) means that corrections are required
-before the next review. The stored markers remain unchanged.
+before the next review.
 
 `transition` validates the input and dispatches by `ReviewEvent`. `_tests_passed`
-selects the next step by status, `_enter_review` handles each stage explicitly
-and increments its counter, and `_manual_review` applies the selected decision.
+selects the next step by status, `_enter_review` counts oral queue entries and
+the first direct code review entry, and `_manual_review` counts requested code
+review iterations when applying that decision.
 Failed tests, repeated passing reports in the queue and terminal states preserve
-the state. Manual decisions require `READY_TO_BE_CHECKED` and never increment
-attempt counters.
+the state. Manual decisions require `READY_TO_BE_CHECKED`; acceptance preserves
+both counters. An oral request keeps its counter until the next passing report.
 
 ## Application integration
 
 The main sheet is the source of review state. Each task occupies four columns:
-score, oral, code review, reviewer. `#0` in the starting stage means solved without
-MR (`#0 / 0` for oral, `0 / #0` for code review); `?N` marks the
+score, oral, code review, reviewer. `#` in the starting stage means solved without
+MR; the other cell is blank and neither attempt counter is displayed.
+The summary also leaves both counters blank until review starts. Legacy `#0 / 0`
+and `0 / #0` remain readable and are normalized on the next write; `?N` marks the
 stage waiting for review, and `-N` the next stage after corrections. Inactive
 stages retain counts. Acceptance appears as `+N` in the stage that accepted; terminal
-failure appears as `fN / fM` (legacy `gN / oM` is still readable). Empty new cells mean no review yet. New courses use
-this schema directly; no legacy sheet or cached-object migration is provided.
+failure appears as `fN / fM` (legacy `gN / oM` is still readable). Empty new cells mean no review yet.
+The four-column review schema is retained; migration from older three-column
+layouts and cached Python objects is not provided.
 
 The API and web cache share `ReviewStatus`. Every report reads the main sheet
 before deciding a transition. Rendering and cache refresh never create attempts.
@@ -93,8 +97,8 @@ ID. MR closure/deletion is not polled.
 
 Manual request types are `accept`, `request_oral`, `request_code_review` and require
 `reported_by` to resolve to a reviewer. Missing identity returns 400, insufficient
-permissions 403, and an invalid transition 409 without sheet writes. `reject` is
-rejected with 400. Internal automatic event names are not exposed as request
+permissions 403, and an invalid transition 409 without sheet writes. `reject`
+and the obsolete manual action names return 400. Internal automatic event names are not exposed as request
 actions; the API derives them from scores. Retrying a completed manual action
 returns 409 without another transition. Passing reports while already waiting
 keep the same attempt count. There is no request-ID deduplication or cross-worker

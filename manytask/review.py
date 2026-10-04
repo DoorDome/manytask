@@ -46,6 +46,10 @@ class ReviewState:
     code_review_attempts: int = 0
 
     def columns(self) -> tuple[str, str]:
+        if self.status == ReviewStatus.EMPTY:
+            return "", ""
+        if self.status == ReviewStatus.SOLVED_WITHOUT_MR:
+            return ("#", "") if self.stage == ReviewStage.ORAL else ("", "#")
         oral, code_review = str(self.oral_attempts), str(self.code_review_attempts)
         if self.status == ReviewStatus.FAILED:
             return f"f{oral}", f"f{code_review}"
@@ -61,6 +65,8 @@ class ReviewState:
         def parse(cell: str) -> tuple[str, int]:
             if cell == "":
                 return "", 0
+            if cell == "#":
+                return "#", 0
             match = re.fullmatch(r"([#?+gof-]?)([0-9]+)", cell)
             if match is None:
                 raise ValueError(f"Invalid review cell: {cell!r}")
