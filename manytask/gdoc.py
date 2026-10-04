@@ -383,17 +383,7 @@ class RatingTable:
                 logger.info(f"Setting reviewer = {new_reviewer}")
             else:
                 logger.warning("No reviewers found")
-
-        repo_link_cell = GCell(
-            student_row,
-            PublicAccountsSheetOptions.GITLAB_COLUMN,
-            self.create_student_repo_link(student),
-        )
-        self.ws.update_cells(
-            [repo_link_cell, score_cell, review_cell, reviewer_cell],
-            value_input_option=ValueInputOption.user_entered,
-        )
-
+        
         tasks = self._list_tasks(with_index=False)
         scores = self._get_row_values(
             student_row,
