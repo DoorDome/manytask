@@ -19,21 +19,21 @@ def test_complete_review_with_return_to_oral():
     state = step(state, E.TESTS_PASSED, has_merge_request=True)
     assert state.columns() == ('?1', '0')
     assert step(state, E.TESTS_PASSED) == state
-    state = step(state, E.CHANGES_ORAL)
+    state = step(state, E.REQUEST_ORAL)
     assert state.columns() == ('-1', '0')
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('?2', '0')
-    state = step(state, E.CHANGES_WRITTEN)
+    state = step(state, E.REQUEST_CODE_REVIEW)
     assert state.columns() == ('2', '-0')
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('2', '?1')
-    state = step(state, E.CHANGES_WRITTEN)
+    state = step(state, E.REQUEST_CODE_REVIEW)
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('2', '?2')
-    state = step(state, E.CHANGES_ORAL)
+    state = step(state, E.REQUEST_ORAL)
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('?3', '2')
-    state = step(state, E.CHANGES_WRITTEN)
+    state = step(state, E.REQUEST_CODE_REVIEW)
     state = step(state, E.TESTS_PASSED)
     state = step(state, E.ACCEPT)
     assert state.columns() == ('3', '+3')
@@ -76,10 +76,10 @@ def test_oral_acceptance_is_allowed():
 @pytest.mark.parametrize('stage', list(Stage))
 def test_oral_limit_when_scheduling(stage):
     state = ReviewState(stage, S.READY_TO_BE_CHECKED, 3, 2)
-    failed = step(state, E.CHANGES_ORAL)
+    failed = step(state, E.REQUEST_ORAL)
     assert failed.columns() == ('f3', 'f2')
     assert step(failed, E.TESTS_PASSED) == failed
-    assert step(state, E.CHANGES_WRITTEN).status == S.CHANGES_REQUESTED
+    assert step(state, E.REQUEST_CODE_REVIEW).status == S.CHANGES_REQUESTED
 
 
 def test_enter_review_does_not_recheck_changed_limit():
@@ -115,7 +115,7 @@ def test_default_limit_and_first_submission_with_mr():
     assert step(ReviewState(), E.TESTS_PASSED, has_merge_request=True).columns() == ('?1', '0')
 
 
-@pytest.mark.parametrize('event', [True, False, 'approve', 'unknown'])
+@pytest.mark.parametrize('event', [True, False, 'accept', 'unknown'])
 def test_event_contract_is_explicit(event):
     with pytest.raises(ValueError, match='ReviewEvent'):
         step(ReviewState(), event)
@@ -154,7 +154,7 @@ def test_configured_pipeline_first_stage_and_immediate_acceptance(stages):
     assert step(accepted, E.TESTS_PASSED, review_stages=stages) == accepted
 
 
-@pytest.mark.parametrize('stage,event', [(Stage.ORAL, E.CHANGES_WRITTEN), (Stage.CODE_REVIEW, E.CHANGES_ORAL)])
+@pytest.mark.parametrize('stage,event', [(Stage.ORAL, E.REQUEST_CODE_REVIEW), (Stage.CODE_REVIEW, E.REQUEST_ORAL)])
 def test_disabled_target_stage_is_rejected(stage, event):
     state = ReviewState(stage, S.READY_TO_BE_CHECKED, 1, 1)
     with pytest.raises(ValueError, match='disabled'):

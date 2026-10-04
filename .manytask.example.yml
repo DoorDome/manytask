@@ -40,7 +40,7 @@ deadlines:
         - task: task_0_0
           score: 10
           review_stages: [oral, code_review]  # default; first item is the starting stage
-          # approve on either enabled stage completes review
+          # accept on either enabled stage completes review
         - task: task_0_1
           score: 10
           review_stages: [code_review]  # oral column is hidden

@@ -179,8 +179,8 @@ def report_score() -> ResponseReturnValue:
         return f"There is no student with user_id {user_id} or username {username}", 404
     
     request_type = request.form["request_type"]
-    if request_type == "reject":
-        return "Use changes_oral or changes_written to select the next review stage", 400
+    if request_type in ("reject", "approve", "changes_oral", "changes_written"):
+        return "Use accept, request_oral or request_code_review for manual review", 400
     if request_type in (ReviewEvent.TESTS_PASSED.value, ReviewEvent.TESTS_FAILED.value):
         return "Automatic review events are derived from the reported score", 400
     action = parse_manual_review_action(request_type)

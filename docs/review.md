@@ -2,7 +2,7 @@
 
 The review model in `manytask/review.py` is independent of Sheets and GitLab.
 `ReviewEvent.TESTS_PASSED` and `TESTS_FAILED` describe automatic results; only
-`approve`, `changes_oral` and `changes_written` are manual decisions.
+`accept`, `request_oral` and `request_code_review` are manual decisions.
 
 Passing tests first records solved-without-MR (`#`) unless the report supplies
 an MR. The first passing report with an MR starts the task's configured first stage. A request for
@@ -40,8 +40,8 @@ tasks:
 
 The list must contain one or two distinct stages. Its first element selects the
 initial stage, not a mandatory sequence. One review is active at a time;
-`changes_oral` and `changes_written` select the next stage after corrections.
-Selecting a disabled stage returns HTTP 409 before sheet writes. `approve`
+`request_oral` and `request_code_review` select the next stage after corrections.
+Selecting a disabled stage returns HTTP 409 before sheet writes. `accept`
 accepts a task on either enabled stage; passing both stages is not required.
 Omitting the field enables both stages and starts with oral review. Unlike the
 previous behavior, this default also permits approval at the first oral review.
@@ -88,7 +88,7 @@ After review starts, omitting the optional MR ID does not undo that fact. Merely
 creating an MR does not notify Manytask: send another successful report with its
 ID. MR closure/deletion is not polled.
 
-Manual request types are `approve`, `changes_oral`, `changes_written` and require
+Manual request types are `accept`, `request_oral`, `request_code_review` and require
 `reported_by` to resolve to a reviewer. Missing identity returns 400, insufficient
 permissions 403, and an invalid transition 409 without sheet writes. `reject` is
 rejected with 400. Internal automatic event names are not exposed as request
@@ -107,8 +107,8 @@ include:
   - local: /ci/review.gitlab-ci.yml
 ```
 
-Remove obsolete approve/reject jobs there. The template provides exactly three
-manual jobs: `review-accept`, `review-changes-oral`, `review-changes-written`.
+Replace obsolete `approve`, `changes_written`, `changes_oral` and `reject` jobs there. The template provides exactly three
+manual jobs: `accept`, `request_oral`, `request_code_review`.
 Configure `MANYTASK_URL` and the existing `TESTER_TOKEN`. Task branches are
 `submit/<task>`, student projects must be named by username (`CI_PROJECT_NAME`),
 and the launching reviewer is `GITLAB_USER_LOGIN`. Jobs POST URL-encoded fields

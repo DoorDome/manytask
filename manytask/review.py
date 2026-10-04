@@ -23,12 +23,12 @@ class ReviewStatus(str, Enum):
 class ReviewEvent(str, Enum):
     TESTS_PASSED = "tests_passed"
     TESTS_FAILED = "tests_failed"
-    ACCEPT = "approve"
-    CHANGES_ORAL = "changes_oral"
-    CHANGES_WRITTEN = "changes_written"
+    ACCEPT = "accept"
+    REQUEST_ORAL = "request_oral"
+    REQUEST_CODE_REVIEW = "request_code_review"
 
 
-MANUAL_REVIEW_EVENTS = (ReviewEvent.ACCEPT, ReviewEvent.CHANGES_ORAL, ReviewEvent.CHANGES_WRITTEN)
+MANUAL_REVIEW_EVENTS = (ReviewEvent.ACCEPT, ReviewEvent.REQUEST_ORAL, ReviewEvent.REQUEST_CODE_REVIEW)
 
 
 def parse_manual_review_action(request_type: str) -> ReviewEvent | None:
@@ -111,7 +111,7 @@ def transition(
             return state
         case ReviewEvent.TESTS_PASSED:
             return _tests_passed(state, review_stages[0], has_merge_request=has_merge_request)
-        case ReviewEvent.ACCEPT | ReviewEvent.CHANGES_ORAL | ReviewEvent.CHANGES_WRITTEN:
+        case ReviewEvent.ACCEPT | ReviewEvent.REQUEST_ORAL | ReviewEvent.REQUEST_CODE_REVIEW:
             return _manual_review(state, event, oral_attempt_limit, review_stages)
     raise ValueError(f"Unsupported review event: {event!r}")
 
@@ -147,13 +147,13 @@ def _manual_review(
     match event:
         case ReviewEvent.ACCEPT:
             return replace(state, status=ReviewStatus.ACCEPTED)
-        case ReviewEvent.CHANGES_ORAL:
+        case ReviewEvent.REQUEST_ORAL:
             _require_stage(ReviewStage.ORAL, review_stages)
             status = ReviewStatus.CHANGES_REQUESTED
             if state.oral_attempts >= oral_attempt_limit:
                 status = ReviewStatus.FAILED
             return replace(state, stage=ReviewStage.ORAL, status=status)
-        case ReviewEvent.CHANGES_WRITTEN:
+        case ReviewEvent.REQUEST_CODE_REVIEW:
             _require_stage(ReviewStage.CODE_REVIEW, review_stages)
             return replace(state, stage=ReviewStage.CODE_REVIEW, status=ReviewStatus.CHANGES_REQUESTED)
     raise ValueError(f"Unsupported manual review event: {event!r}")
