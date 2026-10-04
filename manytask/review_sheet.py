@@ -11,7 +11,7 @@ from .spreadsheet import update_cells_request
 REVIEW_DETAILS_SHEET = "review_details"
 REVIEW_DETAILS_COLUMNS = (
     "login", "task", "group", "oral_attempts", "last_oral_review_at",
-    "code_review_attempts", "last_code_review_at", "first_successful_submission_at",
+    "codereview_attempts", "last_codereview_at", "first_successful_submission_at",
     "last_successful_submission_at", "stage", "status",
 )
 
@@ -32,7 +32,7 @@ def format_timestamp(value: datetime | None) -> str:
 @dataclass(frozen=True)
 class ReviewTimestamps:
     last_oral_review_at: datetime | None = None
-    last_code_review_at: datetime | None = None
+    last_codereview_at: datetime | None = None
     first_successful_submission_at: datetime | None = None
     last_successful_submission_at: datetime | None = None
 
@@ -48,7 +48,7 @@ class ReviewTimestamps:
             raise ValueError("Expected a ReviewEvent")
         if reviewed_stage == ReviewStage.ORAL:
             return replace(self, last_oral_review_at=at)
-        return replace(self, last_code_review_at=at)
+        return replace(self, last_codereview_at=at)
 
 
 class ReviewDetailsSheet:
@@ -59,15 +59,15 @@ class ReviewDetailsSheet:
         except gspread.WorksheetNotFound:
             self.ws = spreadsheet.add_worksheet(REVIEW_DETAILS_SHEET, rows=1000, cols=len(REVIEW_DETAILS_COLUMNS))
         header = self.ws.row_values(1)
-        legacy_header = tuple(name.replace("code_review_attempts", "written_attempts")
-                             .replace("last_code_review_at", "last_written_review_at")
+        legacy_header = tuple(name.replace("codereview_attempts", "written_attempts")
+                             .replace("last_codereview_at", "last_written_review_at")
                              for name in REVIEW_DETAILS_COLUMNS)
         if tuple(header) == legacy_header:
             requests = [update_cells_request(self.ws.id, 1, 1, list(REVIEW_DETAILS_COLUMNS))]
             stage_column = REVIEW_DETAILS_COLUMNS.index("stage") + 1
             for row, values in enumerate(self.ws.get_values()[1:], 2):
                 if len(values) >= stage_column and values[stage_column - 1] == "written":
-                    requests.append(update_cells_request(self.ws.id, row, stage_column, ["code_review"]))
+                    requests.append(update_cells_request(self.ws.id, row, stage_column, ["codereview"]))
             self.spreadsheet.batch_update({"requests": requests})
             header = list(REVIEW_DETAILS_COLUMNS)
         if not header:
@@ -87,7 +87,7 @@ class ReviewDetailsSheet:
         values = dict(zip(REVIEW_DETAILS_COLUMNS, row))
         return index, ReviewTimestamps(
             last_oral_review_at=parse_timestamp(values.get("last_oral_review_at", "")),
-            last_code_review_at=parse_timestamp(values.get("last_code_review_at", "")),
+            last_codereview_at=parse_timestamp(values.get("last_codereview_at", "")),
             first_successful_submission_at=parse_timestamp(values.get("first_successful_submission_at", "")),
             last_successful_submission_at=parse_timestamp(values.get("last_successful_submission_at", "")),
         )
@@ -98,7 +98,7 @@ class ReviewDetailsSheet:
         show_attempts = state.status not in (ReviewStatus.EMPTY, ReviewStatus.SOLVED_WITHOUT_MR)
         values = [login, task, group, state.oral_attempts if show_attempts else "",
                   format_timestamp(dates.last_oral_review_at),
-                  state.code_review_attempts if show_attempts else "", format_timestamp(dates.last_code_review_at),
+                  state.codereview_attempts if show_attempts else "", format_timestamp(dates.last_codereview_at),
                   format_timestamp(dates.first_successful_submission_at),
                   format_timestamp(dates.last_successful_submission_at), state.stage.value, state.status.value]
         requests: list[dict[str, Any]] = []

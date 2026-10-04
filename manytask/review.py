@@ -5,10 +5,10 @@ from enum import Enum
 
 class ReviewStage(str, Enum):
     ORAL = "oral"
-    CODE_REVIEW = "code_review"
+    CODEREVIEW = "codereview"
 
 
-DEFAULT_REVIEW_STAGES = (ReviewStage.ORAL, ReviewStage.CODE_REVIEW)
+DEFAULT_REVIEW_STAGES = (ReviewStage.ORAL, ReviewStage.CODEREVIEW)
 
 
 class ReviewStatus(str, Enum):
@@ -25,10 +25,10 @@ class ReviewEvent(str, Enum):
     TESTS_FAILED = "tests_failed"
     ACCEPT = "accept"
     REQUEST_ORAL = "request_oral"
-    REQUEST_CODE_REVIEW = "request_code_review"
+    REQUEST_CODEREVIEW = "request_codereview"
 
 
-MANUAL_REVIEW_EVENTS = (ReviewEvent.ACCEPT, ReviewEvent.REQUEST_ORAL, ReviewEvent.REQUEST_CODE_REVIEW)
+MANUAL_REVIEW_EVENTS = (ReviewEvent.ACCEPT, ReviewEvent.REQUEST_ORAL, ReviewEvent.REQUEST_CODEREVIEW)
 
 
 def parse_manual_review_action(request_type: str) -> ReviewEvent | None:
@@ -43,25 +43,25 @@ class ReviewState:
     stage: ReviewStage = ReviewStage.ORAL
     status: ReviewStatus = ReviewStatus.EMPTY
     oral_attempts: int = 0
-    code_review_attempts: int = 0
+    codereview_attempts: int = 0
 
     def columns(self) -> tuple[str, str]:
         if self.status == ReviewStatus.EMPTY:
             return "", ""
         if self.status == ReviewStatus.SOLVED_WITHOUT_MR:
             return ("#", "") if self.stage == ReviewStage.ORAL else ("", "#")
-        oral, code_review = str(self.oral_attempts), str(self.code_review_attempts)
+        oral, codereview = str(self.oral_attempts), str(self.codereview_attempts)
         if self.status == ReviewStatus.FAILED:
-            return f"f{oral}", f"f{code_review}"
+            return f"f{oral}", f"f{codereview}"
         if self.status != ReviewStatus.EMPTY:
             if self.stage == ReviewStage.ORAL:
                 oral = self.status.value + oral
             else:
-                code_review = self.status.value + code_review
-        return oral, code_review
+                codereview = self.status.value + codereview
+        return oral, codereview
 
     @classmethod
-    def from_columns(cls, oral: str, code_review: str) -> "ReviewState":
+    def from_columns(cls, oral: str, codereview: str) -> "ReviewState":
         def parse(cell: str) -> tuple[str, int]:
             if cell == "":
                 return "", 0
@@ -73,23 +73,23 @@ class ReviewState:
             return match[1], int(match[2])
 
         oral_marker, oral_count = parse(oral)
-        code_review_marker, code_review_count = parse(code_review)
-        if (oral_marker, code_review_marker) in (("g", "o"), ("f", "f")):
+        codereview_marker, codereview_count = parse(codereview)
+        if (oral_marker, codereview_marker) in (("g", "o"), ("f", "f")):
             stage, status = ReviewStage.ORAL, ReviewStatus.FAILED
-        elif oral_marker in ("#", "?", "-", "+") and not code_review_marker:
+        elif oral_marker in ("#", "?", "-", "+") and not codereview_marker:
             stage, status = ReviewStage.ORAL, ReviewStatus(oral_marker)
-        elif code_review_marker in ("#", "?", "-", "+") and not oral_marker:
-            stage, status = ReviewStage.CODE_REVIEW, ReviewStatus(code_review_marker)
-        elif not oral_marker and not code_review_marker and oral_count == code_review_count == 0:
+        elif codereview_marker in ("#", "?", "-", "+") and not oral_marker:
+            stage, status = ReviewStage.CODEREVIEW, ReviewStatus(codereview_marker)
+        elif not oral_marker and not codereview_marker and oral_count == codereview_count == 0:
             stage, status = ReviewStage.ORAL, ReviewStatus.EMPTY
         else:
             raise ValueError("Conflicting or misplaced review markers")
-        if status == ReviewStatus.SOLVED_WITHOUT_MR and (oral_count or code_review_count):
+        if status == ReviewStatus.SOLVED_WITHOUT_MR and (oral_count or codereview_count):
             raise ValueError("A solution without an MR cannot have review attempts")
-        active_count = oral_count if stage == ReviewStage.ORAL else code_review_count
+        active_count = oral_count if stage == ReviewStage.ORAL else codereview_count
         if status in (ReviewStatus.READY_TO_BE_CHECKED, ReviewStatus.ACCEPTED) and active_count == 0:
             raise ValueError("A reviewed stage must have at least one attempt")
-        return cls(stage, status, oral_count, code_review_count)
+        return cls(stage, status, oral_count, codereview_count)
 
 
 def transition(
@@ -117,7 +117,7 @@ def transition(
             return state
         case ReviewEvent.TESTS_PASSED:
             return _tests_passed(state, review_stages[0], has_merge_request=has_merge_request)
-        case ReviewEvent.ACCEPT | ReviewEvent.REQUEST_ORAL | ReviewEvent.REQUEST_CODE_REVIEW:
+        case ReviewEvent.ACCEPT | ReviewEvent.REQUEST_ORAL | ReviewEvent.REQUEST_CODEREVIEW:
             return _manual_review(state, event, oral_attempt_limit, review_stages)
     raise ValueError(f"Unsupported review event: {event!r}")
 
@@ -140,10 +140,10 @@ def _enter_review(state: ReviewState) -> ReviewState:
     match state.stage:
         case ReviewStage.ORAL:
             return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, oral_attempts=state.oral_attempts + 1)
-        case ReviewStage.CODE_REVIEW:
-            attempts = (max(1, state.code_review_attempts) if state.status == ReviewStatus.CHANGES_REQUESTED
-                        else state.code_review_attempts + 1)
-            return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, code_review_attempts=attempts)
+        case ReviewStage.CODEREVIEW:
+            attempts = (max(1, state.codereview_attempts) if state.status == ReviewStatus.CHANGES_REQUESTED
+                        else state.codereview_attempts + 1)
+            return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, codereview_attempts=attempts)
     raise ValueError(f"Unsupported review stage: {state.stage!r}")
 
 
@@ -161,10 +161,10 @@ def _manual_review(
             if state.oral_attempts >= oral_attempt_limit:
                 status = ReviewStatus.FAILED
             return replace(state, stage=ReviewStage.ORAL, status=status)
-        case ReviewEvent.REQUEST_CODE_REVIEW:
-            _require_stage(ReviewStage.CODE_REVIEW, review_stages)
-            return replace(state, stage=ReviewStage.CODE_REVIEW, status=ReviewStatus.CHANGES_REQUESTED,
-                           code_review_attempts=state.code_review_attempts + 1)
+        case ReviewEvent.REQUEST_CODEREVIEW:
+            _require_stage(ReviewStage.CODEREVIEW, review_stages)
+            return replace(state, stage=ReviewStage.CODEREVIEW, status=ReviewStatus.CHANGES_REQUESTED,
+                           codereview_attempts=state.codereview_attempts + 1)
     raise ValueError(f"Unsupported manual review event: {event!r}")
 
 

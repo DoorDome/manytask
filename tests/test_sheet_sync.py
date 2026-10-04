@@ -167,14 +167,14 @@ def test_mixed_pipelines_hide_only_unused_columns_and_preserve_four_column_block
     workbook = Workbook()
     ws = workbook.add_worksheet("main", rows=100, cols=3)
     table = RatingTable(ws, SimpleCache())
-    config = course_config([('first', ['oral', 'code_review', 'both'])])
+    config = course_config([('first', ['oral', 'codereview', 'both'])])
     configure_stages(config, 'oral', 'oral')
-    configure_stages(config, 'code_review', 'code_review')
-    configure_stages(config, 'both', 'code_review', 'oral')
+    configure_stages(config, 'codereview', 'codereview')
+    configure_stages(config, 'both', 'codereview', 'oral')
     table.sync_columns(config.deadlines)
     assert ws.col_count == 15
-    assert ws.hidden_columns == {5, 8}  # F: oral task's code_review; I: code_review task's oral.
-    assert [table._find_task_column(name) for name in ('oral', 'code_review', 'both')] == [4, 8, 12]
+    assert ws.hidden_columns == {5, 8}  # F: oral task's codereview; I: codereview task's oral.
+    assert [table._find_task_column(name) for name in ('oral', 'codereview', 'both')] == [4, 8, 12]
     assert ws.rows[3][3:] == ['score', 'oral', 'code review', 'reviewer'] * 3
     workbook.batch_update.reset_mock()
     table.sync_columns(config.deadlines)
@@ -185,7 +185,7 @@ def test_existing_pipeline_changes_only_visibility_and_can_unhide(filled_table):
     table = filled_table
     config = course_config([('first', ['a', 'b']), ('second', ['c'])])
     configure_stages(config, 'a', 'oral')
-    configure_stages(config, 'b', 'code_review')
+    configure_stages(config, 'b', 'codereview')
     before = deepcopy(table.ws.rows)
     width = table.ws.col_count
     table.sync_columns(config.deadlines)
@@ -194,8 +194,8 @@ def test_existing_pipeline_changes_only_visibility_and_can_unhide(filled_table):
     assert table.ws.col_count == width
     requests = table.ws.spreadsheet.batch_update.call_args.args[0]['requests']
     assert all('updateDimensionProperties' in request for request in requests)
-    configure_stages(config, 'a', 'code_review', 'oral')
-    configure_stages(config, 'b', 'oral', 'code_review')
+    configure_stages(config, 'a', 'codereview', 'oral')
+    configure_stages(config, 'b', 'oral', 'codereview')
     table.sync_columns(config.deadlines)
     assert table.ws.hidden_columns == set()
     assert table.ws.rows == before
@@ -208,15 +208,15 @@ def test_insertions_shift_hidden_columns_and_reset_inherited_visibility(filled_t
     table = filled_table
     config = course_config([('first', ['a', 'b']), ('second', ['c'])])
     configure_stages(config, 'a', 'oral')
-    configure_stages(config, 'b', 'code_review')
+    configure_stages(config, 'b', 'codereview')
     table.sync_columns(config.deadlines)
     # Inserting after a manually hidden reviewer column must not hide a new task.
     table.ws.hidden_columns.add(6)
     before = snapshot_tasks(table)
     config = course_config([('first', ['new1', 'a', 'new2', 'b']), ('second', ['c'])])
     configure_stages(config, 'a', 'oral')
-    configure_stages(config, 'b', 'code_review')
-    configure_stages(config, 'new1', 'code_review')
+    configure_stages(config, 'b', 'codereview')
+    configure_stages(config, 'new1', 'codereview')
     table.sync_columns(config.deadlines)
     assert table.ws.hidden_columns == {4, 9, 10, 16}
     assert {name: snapshot_tasks(table)[name] for name in before} == before

@@ -20,10 +20,10 @@ accept:
   variables:
     REVIEW_ACTION: accept
 
-request_code_review:
+request_codereview:
   extends: .manytask-review
   variables:
-    REVIEW_ACTION: request_code_review
+    REVIEW_ACTION: request_codereview
 
 request_oral:
   extends: .manytask-review

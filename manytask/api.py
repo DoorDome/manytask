@@ -180,7 +180,7 @@ def report_score() -> ResponseReturnValue:
     
     request_type = request.form["request_type"]
     if request_type in ("reject", "approve", "changes_oral", "changes_written"):
-        return "Use accept, request_oral or request_code_review for manual review", 400
+        return "Use accept, request_oral or request_codereview for manual review", 400
     if request_type in (ReviewEvent.TESTS_PASSED.value, ReviewEvent.TESTS_FAILED.value):
         return "Automatic review events are derived from the reported score", 400
     action = parse_manual_review_action(request_type)

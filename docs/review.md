@@ -2,13 +2,13 @@
 
 The review model in `manytask/review.py` is independent of Sheets and GitLab.
 `ReviewEvent.TESTS_PASSED` and `TESTS_FAILED` describe automatic results; only
-`accept`, `request_oral` and `request_code_review` are manual decisions.
+`accept`, `request_oral` and `request_codereview` are manual decisions.
 
 Passing tests first records solved-without-MR (`#`) unless the report supplies
 an MR. The first passing report with an MR starts the task's configured first stage. A request for
 changes selects the next stage; a later passing report enters that stage's
 review queue. Oral attempts increment on entry into `?`. Code review counts the current
-iteration immediately on `request_code_review`: `-1` becomes `?1` when tests
+iteration immediately on `request_codereview`: `-1` becomes `?1` when tests
 pass, without another increment. Starting directly in code review gives `?1`.
 A subsequent code review request increments the count again.
 Repeated passing reports while waiting do not create attempts. Approval at either
@@ -30,20 +30,20 @@ tasks:
   - task: oral_only
     score: 10
     review_stages: [oral]
-  - task: code_review_only
+  - task: codereview_only
     score: 10
-    review_stages: [code_review]
+    review_stages: [codereview]
   - task: either_start_oral
     score: 10
-    review_stages: [oral, code_review]
-  - task: either_start_code_review
+    review_stages: [oral, codereview]
+  - task: either_start_codereview
     score: 10
-    review_stages: [code_review, oral]
+    review_stages: [codereview, oral]
 ```
 
 The list must contain one or two distinct stages. Its first element selects the
 initial stage, not a mandatory sequence. One review is active at a time;
-`request_oral` and `request_code_review` select the next stage after corrections.
+`request_oral` and `request_codereview` select the next stage after corrections.
 Selecting a disabled stage returns HTTP 409 before sheet writes. `accept`
 accepts a task on either enabled stage; passing both stages is not required.
 Omitting the field enables both stages and starts with oral review. Unlike the
@@ -95,7 +95,7 @@ After review starts, omitting the optional MR ID does not undo that fact. Merely
 creating an MR does not notify Manytask: send another successful report with its
 ID. MR closure/deletion is not polled.
 
-Manual request types are `accept`, `request_oral`, `request_code_review` and require
+Manual request types are `accept`, `request_oral`, `request_codereview` and require
 `reported_by` to resolve to a reviewer. Missing identity returns 400, insufficient
 permissions 403, and an invalid transition 409 without sheet writes. `reject`
 and the obsolete manual action names return 400. Internal automatic event names are not exposed as request
@@ -115,7 +115,7 @@ include:
 ```
 
 Replace obsolete `approve`, `changes_written`, `changes_oral` and `reject` jobs there. The template provides exactly three
-manual jobs: `accept`, `request_oral`, `request_code_review`.
+manual jobs: `accept`, `request_oral`, `request_codereview`.
 Configure `MANYTASK_URL` and the existing `TESTER_TOKEN`. Task branches are
 `submit/<task>`, student projects must be named by username (`CI_PROJECT_NAME`),
 and the launching reviewer is `GITLAB_USER_LOGIN`. Jobs POST URL-encoded fields
@@ -129,7 +129,7 @@ Offline tests do not establish that the external CI has been deployed.
 
 ```text
 login, task, group, oral_attempts, last_oral_review_at,
-code_review_attempts, last_code_review_at, first_successful_submission_at,
+codereview_attempts, last_codereview_at, first_successful_submission_at,
 last_successful_submission_at, stage, status
 ```
 
@@ -192,7 +192,7 @@ Reference: [Google Sheets dimension properties](https://developers.google.com/wo
 
 ## Renaming written review
 
-Use `code_review` in `review_stages`; the public column is named `code review`.
+Use `codereview` in `review_stages`; the public column is named `code review`.
 Update course YAML before deploying this version. The exact legacy
 `review_details` header is migrated automatically, including `written` stage
 values, without changing counts or timestamps. Unknown schemas are rejected.

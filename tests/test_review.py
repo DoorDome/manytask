@@ -23,17 +23,17 @@ def test_complete_review_with_return_to_oral():
     assert state.columns() == ('-1', '0')
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('?2', '0')
-    state = step(state, E.REQUEST_CODE_REVIEW)
+    state = step(state, E.REQUEST_CODEREVIEW)
     assert state.columns() == ('2', '-1')
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('2', '?1')
-    state = step(state, E.REQUEST_CODE_REVIEW)
+    state = step(state, E.REQUEST_CODEREVIEW)
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('2', '?2')
     state = step(state, E.REQUEST_ORAL)
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('?3', '2')
-    state = step(state, E.REQUEST_CODE_REVIEW)
+    state = step(state, E.REQUEST_CODEREVIEW)
     state = step(state, E.TESTS_PASSED)
     state = step(state, E.ACCEPT)
     assert state.columns() == ('3', '+3')
@@ -44,10 +44,10 @@ STATES = [
     ReviewState(), ReviewState(status=S.SOLVED_WITHOUT_MR),
     ReviewState(status=S.READY_TO_BE_CHECKED, oral_attempts=1),
     ReviewState(status=S.CHANGES_REQUESTED, oral_attempts=1),
-    ReviewState(Stage.CODE_REVIEW, S.CHANGES_REQUESTED, 1, 0),
-    ReviewState(Stage.CODE_REVIEW, S.READY_TO_BE_CHECKED, 1, 2),
-    ReviewState(Stage.CODE_REVIEW, S.ACCEPTED, 1, 2),
-    ReviewState(status=S.FAILED, oral_attempts=3, code_review_attempts=2),
+    ReviewState(Stage.CODEREVIEW, S.CHANGES_REQUESTED, 1, 0),
+    ReviewState(Stage.CODEREVIEW, S.READY_TO_BE_CHECKED, 1, 2),
+    ReviewState(Stage.CODEREVIEW, S.ACCEPTED, 1, 2),
+    ReviewState(status=S.FAILED, oral_attempts=3, codereview_attempts=2),
 ]
 
 
@@ -79,7 +79,7 @@ def test_oral_limit_when_scheduling(stage):
     failed = step(state, E.REQUEST_ORAL)
     assert failed.columns() == ('f3', 'f2')
     assert step(failed, E.TESTS_PASSED) == failed
-    assert step(state, E.REQUEST_CODE_REVIEW).status == S.CHANGES_REQUESTED
+    assert step(state, E.REQUEST_CODEREVIEW).status == S.CHANGES_REQUESTED
 
 
 def test_enter_review_does_not_recheck_changed_limit():
@@ -87,14 +87,14 @@ def test_enter_review_does_not_recheck_changed_limit():
     assert step(state, E.TESTS_PASSED).columns() == ('?4', '0')
 
 
-@pytest.mark.parametrize('oral,code_review', [
+@pytest.mark.parametrize('oral,codereview', [
     ('?1', '?1'), ('+0', '0'), ('0', '#1'), ('g3', '0'), ('3', 'o1'),
     ('#1', '0'), ('1', '2'), ('?', '0'), ("'?1", '0'), ('-x', '0'),
     ('?0', '0'), ('1', '+0'), ('-1', '-1'), ('-2.5', '0'),
 ])
-def test_invalid_columns(oral, code_review):
+def test_invalid_columns(oral, codereview):
     with pytest.raises(ValueError):
-        ReviewState.from_columns(oral, code_review)
+        ReviewState.from_columns(oral, codereview)
 
 
 def test_empty_cells():
@@ -108,7 +108,7 @@ def test_without_mr_hides_both_zero_counters_and_reads_legacy_cells(stage):
     legacy = ('#0', '0') if stage == Stage.ORAL else ('0', '#0')
     state = step(ReviewState(), E.TESTS_PASSED, review_stages=(stage,))
     assert state.columns() == expected
-    assert (state.oral_attempts, state.code_review_attempts) == (0, 0)
+    assert (state.oral_attempts, state.codereview_attempts) == (0, 0)
     assert ReviewState.from_columns(*expected) == state
     assert ReviewState.from_columns(*legacy) == state
     assert step(state, E.TESTS_PASSED, review_stages=(stage,)) == state
@@ -136,7 +136,7 @@ def test_event_contract_is_explicit(event):
         step(ReviewState(), event)
 
 
-@pytest.mark.parametrize('oral,code_review,expected', [
+@pytest.mark.parametrize('oral,codereview,expected', [
     ('-1', '2', ('?2', '2')),
     ('2', '-0', ('2', '?1')),
     ('3', '-5', ('3', '?5')),
@@ -146,14 +146,14 @@ def test_event_contract_is_explicit(event):
     ('f3', 'f2', ('f3', 'f2')),
 ])
 @pytest.mark.parametrize('has_merge_request', [False, True])
-def test_passing_report_preserves_stage_and_counts(oral, code_review, expected, has_merge_request):
-    state = ReviewState.from_columns(oral, code_review)
+def test_passing_report_preserves_stage_and_counts(oral, codereview, expected, has_merge_request):
+    state = ReviewState.from_columns(oral, codereview)
     assert step(state, E.TESTS_PASSED, has_merge_request=has_merge_request).columns() == expected
-    assert state.columns() == (oral, code_review)
+    assert state.columns() == (oral, codereview)
 
 
-@pytest.mark.parametrize('stages', [(Stage.ORAL,), (Stage.CODE_REVIEW,),
-                                    (Stage.ORAL, Stage.CODE_REVIEW), (Stage.CODE_REVIEW, Stage.ORAL)])
+@pytest.mark.parametrize('stages', [(Stage.ORAL,), (Stage.CODEREVIEW,),
+                                    (Stage.ORAL, Stage.CODEREVIEW), (Stage.CODEREVIEW, Stage.ORAL)])
 def test_configured_pipeline_first_stage_and_immediate_acceptance(stages):
     state = step(ReviewState(), E.TESTS_PASSED, review_stages=stages)
     assert state.stage == stages[0]
@@ -161,7 +161,7 @@ def test_configured_pipeline_first_stage_and_immediate_acceptance(stages):
     assert ReviewState.from_columns(*state.columns()) == state
     state = step(state, E.TESTS_PASSED, review_stages=stages, has_merge_request=True)
     assert state.stage == stages[0]
-    assert (state.oral_attempts, state.code_review_attempts) == ((1, 0) if stages[0] == Stage.ORAL else (0, 1))
+    assert (state.oral_attempts, state.codereview_attempts) == ((1, 0) if stages[0] == Stage.ORAL else (0, 1))
     accepted = step(state, E.ACCEPT, review_stages=stages)
     assert accepted.status == S.ACCEPTED
     assert accepted.stage == stages[0]
@@ -169,7 +169,7 @@ def test_configured_pipeline_first_stage_and_immediate_acceptance(stages):
     assert step(accepted, E.TESTS_PASSED, review_stages=stages) == accepted
 
 
-@pytest.mark.parametrize('stage,event', [(Stage.ORAL, E.REQUEST_CODE_REVIEW), (Stage.CODE_REVIEW, E.REQUEST_ORAL)])
+@pytest.mark.parametrize('stage,event', [(Stage.ORAL, E.REQUEST_CODEREVIEW), (Stage.CODEREVIEW, E.REQUEST_ORAL)])
 def test_disabled_target_stage_is_rejected(stage, event):
     state = ReviewState(stage, S.READY_TO_BE_CHECKED, 1, 1)
     with pytest.raises(ValueError, match='disabled'):
@@ -181,19 +181,19 @@ def test_disabled_target_stage_is_rejected(stage, event):
 def test_disabling_current_stage_requires_explicit_state_resolution(status, event):
     state = ReviewState(Stage.ORAL, status, 1, 0)
     with pytest.raises(ValueError, match='Current review stage'):
-        step(state, event, review_stages=(Stage.CODE_REVIEW,))
-    assert step(state, E.TESTS_FAILED, review_stages=(Stage.CODE_REVIEW,)) == state
+        step(state, event, review_stages=(Stage.CODEREVIEW,))
+    assert step(state, E.TESTS_FAILED, review_stages=(Stage.CODEREVIEW,)) == state
 
 
-@pytest.mark.parametrize('stages', [[], ['oral', 'oral'], ['code_review', 'code_review'], ['unknown'],
-                                    ['oral', 'code_review', 'oral'], None, 'oral'])
+@pytest.mark.parametrize('stages', [[], ['oral', 'oral'], ['codereview', 'codereview'], ['unknown'],
+                                    ['oral', 'codereview', 'oral'], None, 'oral'])
 def test_invalid_task_review_configuration(stages):
     from manytask.config import ManytaskTaskConfig
     with pytest.raises(ValidationError):
         ManytaskTaskConfig(task='task', score=10, review_stages=stages)
 
 
-@pytest.mark.parametrize('stages', [['oral'], ['code_review'], ['oral', 'code_review'], ['code_review', 'oral']])
+@pytest.mark.parametrize('stages', [['oral'], ['codereview'], ['oral', 'codereview'], ['codereview', 'oral']])
 def test_task_review_configuration_roundtrip(stages):
     from manytask.config import ManytaskTaskConfig
     task = ManytaskTaskConfig(task='task', score=10, review_stages=stages)
@@ -209,18 +209,18 @@ def test_failure_format_and_legacy_cells(columns):
 
 
 @pytest.mark.parametrize('first_stage', list(Stage))
-def test_code_review_request_counts_current_iteration_once(first_stage):
+def test_codereview_request_counts_current_iteration_once(first_stage):
     state = step(ReviewState(), E.TESTS_PASSED, has_merge_request=True,
                  review_stages=(first_stage, *[s for s in Stage if s != first_stage]))
     for _ in range(3):
-        previous = state.code_review_attempts
-        state = step(state, E.REQUEST_CODE_REVIEW)
-        assert state.code_review_attempts == previous + 1
+        previous = state.codereview_attempts
+        state = step(state, E.REQUEST_CODEREVIEW)
+        assert state.codereview_attempts == previous + 1
         assert state.columns()[1] == f'-{previous + 1}'
         assert step(state, E.TESTS_FAILED) == state
         with pytest.raises(ValueError):
-            step(state, E.REQUEST_CODE_REVIEW)
+            step(state, E.REQUEST_CODEREVIEW)
         state = step(ReviewState.from_columns(*state.columns()), E.TESTS_PASSED)
         assert state.columns()[1] == f'?{previous + 1}'
         assert step(state, E.TESTS_PASSED) == state
-    assert step(state, E.ACCEPT).code_review_attempts == state.code_review_attempts
+    assert step(state, E.ACCEPT).codereview_attempts == state.codereview_attempts
