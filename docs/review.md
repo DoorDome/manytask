@@ -7,7 +7,10 @@ The review model in `manytask/review.py` is independent of Sheets and GitLab.
 Passing tests first records solved-without-MR (`#`) unless the report supplies
 an MR. The first passing report with an MR starts the task's configured first stage. A request for
 changes selects the next stage; a later passing report enters that stage's
-review queue. Each entry into `?` increments only that stage's attempt counter.
+review queue. Oral attempts increment on entry into `?`. Code review counts the current
+iteration immediately on `request_code_review`: `-1` becomes `?1` when tests
+pass, without another increment. Starting directly in code review gives `?1`.
+A subsequent code review request increments the count again.
 Repeated passing reports while waiting do not create attempts. Approval at either
 enabled stage accepts the task, including the first review. Acceptance and
 oral-limit failure are terminal.

@@ -41,7 +41,9 @@ def test_api_end_to_end(api):
     assert report(api, request_type='request_code_review', reported_by='assistant').status_code == 409
     assert report(api, merge_request_iid='42').json['review_status'] == '?'
     assert report(api, request_type='request_code_review', reported_by='assistant').json['review_status'] == '-'
+    assert api[1].rating_table.ws.rows[4][4:6] == ['1', '-1']
     assert report(api).json['review_status'] == '?'
+    assert api[1].rating_table.ws.rows[4][4:6] == ['1', '?1']
     assert report(api, request_type='accept', reported_by='assistant').json['review_status'] == '+'
     before = deepcopy(api[1].rating_table.ws.rows)
     assert report(api, request_type='accept', reported_by='assistant').status_code == 409

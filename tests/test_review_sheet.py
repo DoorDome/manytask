@@ -60,9 +60,10 @@ def test_stale_summary_never_controls_transition(table):
     for index in [3, 5, 9, 10]:
         details.rows[1][index] = 'corrupt'
     assert submit(table, E.REQUEST_CODE_REVIEW).review == '-'
-    assert table.ws.rows[4][4:6] == ['1', '-0']
+    assert table.ws.rows[4][4:6] == ['1', '-1']
     assert dates_row(table)['stage'] == 'code_review'
     assert dates_row(table)['oral_attempts'] == '1'
+    assert dates_row(table)['code_review_attempts'] == '1'
     assert dates_row(table)['last_oral_review_at'] == NOW.isoformat(sep=' ')
 
 
@@ -122,7 +123,7 @@ def test_summary_failure_does_not_fail_main_transition(table, failure, caplog):
             workbook._batch_update(body)
         workbook.batch_update.side_effect = fail_summary
     assert submit(table, E.REQUEST_CODE_REVIEW).review == '-'
-    assert table.ws.rows[4][4:6] == ['1', '-0']
+    assert table.ws.rows[4][4:6] == ['1', '-1']
     assert 'Cannot update review_details for alice/task' in caplog.text
 
 

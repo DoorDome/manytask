@@ -24,7 +24,7 @@ def test_complete_review_with_return_to_oral():
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('?2', '0')
     state = step(state, E.REQUEST_CODE_REVIEW)
-    assert state.columns() == ('2', '-0')
+    assert state.columns() == ('2', '-1')
     state = step(state, E.TESTS_PASSED)
     assert state.columns() == ('2', '?1')
     state = step(state, E.REQUEST_CODE_REVIEW)
@@ -124,7 +124,7 @@ def test_event_contract_is_explicit(event):
 @pytest.mark.parametrize('oral,code_review,expected', [
     ('-1', '2', ('?2', '2')),
     ('2', '-0', ('2', '?1')),
-    ('3', '-5', ('3', '?6')),
+    ('3', '-5', ('3', '?5')),
     ('?1', '2', ('?1', '2')),
     ('2', '?3', ('2', '?3')),
     ('2', '+3', ('2', '+3')),
@@ -191,3 +191,21 @@ def test_failure_format_and_legacy_cells(columns):
     state = ReviewState.from_columns(*columns)
     assert state.status == S.FAILED
     assert state.columns() == ('f3', 'f2')
+
+
+@pytest.mark.parametrize('first_stage', list(Stage))
+def test_code_review_request_counts_current_iteration_once(first_stage):
+    state = step(ReviewState(), E.TESTS_PASSED, has_merge_request=True,
+                 review_stages=(first_stage, *[s for s in Stage if s != first_stage]))
+    for _ in range(3):
+        previous = state.code_review_attempts
+        state = step(state, E.REQUEST_CODE_REVIEW)
+        assert state.code_review_attempts == previous + 1
+        assert state.columns()[1] == f'-{previous + 1}'
+        assert step(state, E.TESTS_FAILED) == state
+        with pytest.raises(ValueError):
+            step(state, E.REQUEST_CODE_REVIEW)
+        state = step(ReviewState.from_columns(*state.columns()), E.TESTS_PASSED)
+        assert state.columns()[1] == f'?{previous + 1}'
+        assert step(state, E.TESTS_PASSED) == state
+    assert step(state, E.ACCEPT).code_review_attempts == state.code_review_attempts

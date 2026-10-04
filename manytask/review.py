@@ -130,12 +130,14 @@ def _tests_passed(state: ReviewState, first_stage: ReviewStage, *, has_merge_req
 
 
 def _enter_review(state: ReviewState) -> ReviewState:
-    """Count a new entry into the queue of the explicitly selected stage."""
+    """Count oral queue entries; code review requests already count their iteration."""
     match state.stage:
         case ReviewStage.ORAL:
             return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, oral_attempts=state.oral_attempts + 1)
         case ReviewStage.CODE_REVIEW:
-            return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, code_review_attempts=state.code_review_attempts + 1)
+            attempts = (max(1, state.code_review_attempts) if state.status == ReviewStatus.CHANGES_REQUESTED
+                        else state.code_review_attempts + 1)
+            return replace(state, status=ReviewStatus.READY_TO_BE_CHECKED, code_review_attempts=attempts)
     raise ValueError(f"Unsupported review stage: {state.stage!r}")
 
 
@@ -155,7 +157,8 @@ def _manual_review(
             return replace(state, stage=ReviewStage.ORAL, status=status)
         case ReviewEvent.REQUEST_CODE_REVIEW:
             _require_stage(ReviewStage.CODE_REVIEW, review_stages)
-            return replace(state, stage=ReviewStage.CODE_REVIEW, status=ReviewStatus.CHANGES_REQUESTED)
+            return replace(state, stage=ReviewStage.CODE_REVIEW, status=ReviewStatus.CHANGES_REQUESTED,
+                           code_review_attempts=state.code_review_attempts + 1)
     raise ValueError(f"Unsupported manual review event: {event!r}")
 
 
