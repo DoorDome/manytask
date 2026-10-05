@@ -32,11 +32,11 @@ def submit(table, event=E.TESTS_PASSED, **kwargs):
 
 
 def test_fresh_course_schema_and_complete_workflow(table):
-    assert table.ws.row_values(4)[3:] == ['score', 'oral', 'written', 'reviewer'] * 2
+    assert table.ws.row_values(4)[3:] == ['score', 'oral', 'code review', 'reviewer'] * 2
     assert submit(table).review == '#'
-    assert table.ws.rows[4][4:6] == ['#0', '0']
+    assert table.ws.rows[4][4:6] == ['#', '']
     assert submit(table, has_merge_request=True).review == '?'
-    assert submit(table, E.CHANGES_WRITTEN).review == '-'
+    assert submit(table, E.REQUEST_CODEREVIEW).review == '-'
     assert submit(table).review == '?'
     assert submit(table, E.ACCEPT).review == '+'
     assert table.ws.rows[4][3:7] == ['10', '1', '+1', '']
@@ -47,7 +47,7 @@ def test_fresh_course_schema_and_complete_workflow(table):
     assert table.ws.rows == before
 
 
-@pytest.mark.parametrize('event', [E.TESTS_FAILED, E.ACCEPT, E.CHANGES_WRITTEN])
+@pytest.mark.parametrize('event', [E.TESTS_FAILED, E.ACCEPT, E.REQUEST_CODEREVIEW])
 def test_invalid_and_failed_events_do_not_create_student(table, event):
     before = deepcopy(table.ws.rows)
     if event == E.TESTS_FAILED:
@@ -84,7 +84,7 @@ def test_manual_action_does_not_regrade_or_reassign(table):
     submit(table, has_merge_request=True)
     assert table.ws.rows[4][6] == 'assistant'
     update = Mock(side_effect=AssertionError('Manual regrade'))
-    table.store_score(student(), 'task', update, E.CHANGES_WRITTEN, oral_attempt_limit=3, group_name="group", at=NOW)
+    table.store_score(student(), 'task', update, E.REQUEST_CODEREVIEW, oral_attempt_limit=3, group_name="group", at=NOW)
     update.assert_not_called()
     assert table.ws.rows[4][3] == '10'
     assert table.ws.rows[4][6] == 'assistant'

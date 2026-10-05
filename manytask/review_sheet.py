@@ -4,14 +4,14 @@ from typing import Any
 
 import gspread
 
-from .review import MANUAL_REVIEW_EVENTS, ReviewEvent, ReviewStage, ReviewState
+from .review import MANUAL_REVIEW_EVENTS, ReviewEvent, ReviewStage, ReviewState, ReviewStatus
 from .spreadsheet import update_cells_request
 
 
 REVIEW_DETAILS_SHEET = "review_details"
 REVIEW_DETAILS_COLUMNS = (
     "login", "task", "group", "oral_attempts", "last_oral_review_at",
-    "written_attempts", "last_written_review_at", "first_successful_submission_at",
+    "codereview_attempts", "last_codereview_at", "first_successful_submission_at",
     "last_successful_submission_at", "stage", "status",
 )
 
@@ -32,7 +32,7 @@ def format_timestamp(value: datetime | None) -> str:
 @dataclass(frozen=True)
 class ReviewTimestamps:
     last_oral_review_at: datetime | None = None
-    last_written_review_at: datetime | None = None
+    last_codereview_at: datetime | None = None
     first_successful_submission_at: datetime | None = None
     last_successful_submission_at: datetime | None = None
 
@@ -48,7 +48,7 @@ class ReviewTimestamps:
             raise ValueError("Expected a ReviewEvent")
         if reviewed_stage == ReviewStage.ORAL:
             return replace(self, last_oral_review_at=at)
-        return replace(self, last_written_review_at=at)
+        return replace(self, last_codereview_at=at)
 
 
 class ReviewDetailsSheet:
@@ -76,7 +76,7 @@ class ReviewDetailsSheet:
         values = dict(zip(REVIEW_DETAILS_COLUMNS, row))
         return index, ReviewTimestamps(
             last_oral_review_at=parse_timestamp(values.get("last_oral_review_at", "")),
-            last_written_review_at=parse_timestamp(values.get("last_written_review_at", "")),
+            last_codereview_at=parse_timestamp(values.get("last_codereview_at", "")),
             first_successful_submission_at=parse_timestamp(values.get("first_successful_submission_at", "")),
             last_successful_submission_at=parse_timestamp(values.get("last_successful_submission_at", "")),
         )
@@ -84,8 +84,10 @@ class ReviewDetailsSheet:
     def write_requests(
         self, row: int, login: str, task: str, group: str, state: ReviewState, dates: ReviewTimestamps,
     ) -> list[dict[str, Any]]:
-        values = [login, task, group, state.oral_attempts, format_timestamp(dates.last_oral_review_at),
-                  state.written_attempts, format_timestamp(dates.last_written_review_at),
+        show_attempts = state.status not in (ReviewStatus.EMPTY, ReviewStatus.SOLVED_WITHOUT_MR)
+        values = [login, task, group, state.oral_attempts if show_attempts else "",
+                  format_timestamp(dates.last_oral_review_at),
+                  state.codereview_attempts if show_attempts else "", format_timestamp(dates.last_codereview_at),
                   format_timestamp(dates.first_successful_submission_at),
                   format_timestamp(dates.last_successful_submission_at), state.stage.value, state.status.value]
         requests: list[dict[str, Any]] = []

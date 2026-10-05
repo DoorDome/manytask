@@ -77,7 +77,7 @@ class PublicAccountsSheetOptions:
 
     COLUMNS_PER_TASK: int = 4
     ORAL_OFFSET: int = 1
-    WRITTEN_OFFSET: int = 2
+    CODEREVIEW_OFFSET: int = 2
     REVIEWER_OFFSET: int = 3
 
 
@@ -292,11 +292,11 @@ class RatingTable:
         options = PublicAccountsSheetOptions
         cells = row_values[column - 1:column - 1 + options.COLUMNS_PER_TASK]
         # Sheets omits trailing empty cells; restore the full task block so even a new
-        # student's empty row has score, oral, written and reviewer slots for indexed reads.
+        # student's empty row has score, oral, codereview and reviewer slots for indexed reads.
         cells += [""] * (options.COLUMNS_PER_TASK - len(cells))
         score = int(cells[0]) if cells[0] != "" else None
         state = ReviewState.from_columns(
-            cells[options.ORAL_OFFSET], cells[options.WRITTEN_OFFSET])
+            cells[options.ORAL_OFFSET], cells[options.CODEREVIEW_OFFSET])
         return score, state, cells[options.REVIEWER_OFFSET] or None
 
     def store_score(
@@ -411,7 +411,7 @@ class RatingTable:
                 update_cells_request(self.ws.id, options.MAX_SCORES_ROW, column, [task.score]),
                 update_cells_request(self.ws.id, options.HEADER_ROW, column, [task.name]),
                 update_cells_request(
-                    self.ws.id, options.SUBHEADER_ROW, column, ["score", "oral", "written", "reviewer"],
+                    self.ws.id, options.SUBHEADER_ROW, column, ["score", "oral", "code review", "reviewer"],
                 ),
             ])
             for start_row, end_row, formatting in (
@@ -433,7 +433,7 @@ class RatingTable:
                 # Inserted dimensions inherit visibility; reset the entire new block first.
                 requests.append(self._column_visibility_request(column_index, options.COLUMNS_PER_TASK, False))
             for stage, offset in ((ReviewStage.ORAL, options.ORAL_OFFSET),
-                                  (ReviewStage.WRITTEN, options.WRITTEN_OFFSET)):
+                                  (ReviewStage.CODEREVIEW, options.CODEREVIEW_OFFSET)):
                 hidden = stage not in task.review_stages
                 was_hidden = (old_columns[task.name] - 1 + offset in hidden_columns
                               if task.name in old_columns else False)

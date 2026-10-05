@@ -38,13 +38,15 @@ def report(api, token='test-token', **data):
 
 def test_api_end_to_end(api):
     assert report(api).json['review_status'] == '#'
-    assert report(api, request_type='changes_written', reported_by='assistant').status_code == 409
+    assert report(api, request_type='request_codereview', reported_by='assistant').status_code == 409
     assert report(api, merge_request_iid='42').json['review_status'] == '?'
-    assert report(api, request_type='changes_written', reported_by='assistant').json['review_status'] == '-'
+    assert report(api, request_type='request_codereview', reported_by='assistant').json['review_status'] == '-'
+    assert api[1].rating_table.ws.rows[4][4:6] == ['1', '-1']
     assert report(api).json['review_status'] == '?'
-    assert report(api, request_type='approve', reported_by='assistant').json['review_status'] == '+'
+    assert api[1].rating_table.ws.rows[4][4:6] == ['1', '?1']
+    assert report(api, request_type='accept', reported_by='assistant').json['review_status'] == '+'
     before = deepcopy(api[1].rating_table.ws.rows)
-    assert report(api, request_type='approve', reported_by='assistant').status_code == 409
+    assert report(api, request_type='accept', reported_by='assistant').status_code == 409
     assert api[1].rating_table.ws.rows == before
 
 
@@ -52,7 +54,7 @@ def test_api_end_to_end(api):
 def test_empty_mr_does_not_start_review(api, mr):
     assert report(api, merge_request_iid=mr).json['review_status'] == '#'
     api[1].rating_table.ws.spreadsheet.batch_update.reset_mock()
-    assert report(api, request_type='changes_oral', reported_by='assistant').status_code == 409
+    assert report(api, request_type='request_oral', reported_by='assistant').status_code == 409
     api[1].rating_table.ws.spreadsheet.batch_update.assert_not_called()
     api[1].gitlab_api.list_reviewers.assert_not_called()
 
@@ -74,8 +76,11 @@ def test_success_is_evaluated_before_deadline_penalty(api):
 @pytest.mark.parametrize('data,status', [
     ({'token': 'wrong'}, 403),
     ({'request_type': 'reject'}, 400),
-    ({'request_type': 'approve'}, 400),
-    ({'request_type': 'approve', 'reported_by': 'alice'}, 403),
+    ({'request_type': 'approve', 'reported_by': 'assistant'}, 400),
+    ({'request_type': 'changes_written', 'reported_by': 'assistant'}, 400),
+    ({'request_type': 'changes_oral', 'reported_by': 'assistant'}, 400),
+    ({'request_type': 'accept'}, 400),
+    ({'request_type': 'accept', 'reported_by': 'alice'}, 403),
     ({'request_type': 'tests_passed'}, 400),
     ({'request_type': 'tests_failed'}, 400),
 ])
@@ -87,26 +92,26 @@ def test_authentication_and_manual_request_validation(api, data, status):
 def test_oral_limit_in_api(api):
     api[1].deadlines.oral_attempt_limit = 1
     assert report(api, merge_request_iid='12').json['review_status'] == '?'
-    assert report(api, request_type='changes_oral', reported_by='assistant').json['review_status'] == 'failed'
+    assert report(api, request_type='request_oral', reported_by='assistant').json['review_status'] == 'failed'
     assert report(api).json['review_status'] == 'failed'
-    assert api[1].rating_table.ws.rows[4][4:6] == ['g1', 'o0']
+    assert api[1].rating_table.ws.rows[4][4:6] == ['f1', 'f0']
 
 
 def test_ci_exposes_exactly_three_manual_actions():
     from pathlib import Path
     config = yaml.safe_load(Path('ci/review.gitlab-ci.yml').read_text())
     jobs = {name: job for name, job in config.items() if not name.startswith('.')}
-    assert set(jobs) == {'review-accept', 'review-changes-oral', 'review-changes-written'}
+    assert set(jobs) == {'accept', 'request_oral', 'request_codereview'}
     assert {job['variables']['REVIEW_ACTION'] for job in jobs.values()} == {e.value for e in MANUAL_REVIEW_EVENTS}
     assert config['.manytask-review']['rules'][0]['when'] == 'manual'
 
 
 def test_summary_failure_after_acceptance_is_still_success(api):
     assert report(api, merge_request_iid='12').status_code == 200
-    assert report(api, request_type='changes_written', reported_by='assistant').status_code == 200
+    assert report(api, request_type='request_codereview', reported_by='assistant').status_code == 200
     assert report(api).status_code == 200
     api[1].rating_table.ws.spreadsheet.worksheet.side_effect = RuntimeError('summary unavailable')
-    result = report(api, request_type='approve', reported_by='assistant')
+    result = report(api, request_type='accept', reported_by='assistant')
     assert result.status_code == 200
     assert result.json['review_status'] == '+'
     assert api[1].rating_table.ws.rows[4][4:6] == ['1', '+1']
@@ -120,7 +125,7 @@ def test_api_preserves_instants_and_uses_server_time_for_manual_review(api, monk
     monkeypatch.setattr(ManytaskDeadlinesConfig, 'get_now_with_timezone', lambda _: now)
     result = report(api, submit_time='2026-01-01 03:00:00+0300', merge_request_iid='12')
     assert result.json['submit_time'] == '2026-01-01 00:00:00+00:00'
-    report(api, request_type='changes_written', reported_by='assistant', submit_time='2000-01-01 00:00:00+0000')
+    report(api, request_type='request_codereview', reported_by='assistant', submit_time='2000-01-01 00:00:00+0000')
     row = api[1].rating_table.ws.spreadsheet.worksheet('review_details').rows[1]
     values = dict(zip(REVIEW_DETAILS_COLUMNS, row))
     assert values['first_successful_submission_at'] == '2026-01-01 00:00:00+00:00'
@@ -129,9 +134,9 @@ def test_api_preserves_instants_and_uses_server_time_for_manual_review(api, monk
 
 @pytest.mark.parametrize('stages,first,accepted', [
     (['oral'], ['?1', '0'], ['+1', '0']),
-    (['written'], ['0', '?1'], ['0', '+1']),
-    (['oral', 'written'], ['?1', '0'], ['+1', '0']),
-    (['written', 'oral'], ['0', '?1'], ['0', '+1']),
+    (['codereview'], ['0', '?1'], ['0', '+1']),
+    (['oral', 'codereview'], ['?1', '0'], ['+1', '0']),
+    (['codereview', 'oral'], ['0', '?1'], ['0', '+1']),
 ])
 def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepted):
     from manytask.review import ReviewStage, ReviewStatus
@@ -140,10 +145,10 @@ def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepte
     task = course.deadlines.find_task('task')[1]
     task.review_stages = tuple(ReviewStage(stage) for stage in stages)
     assert report(api).json['review_status'] == '#'
-    assert course.rating_table.ws.rows[4][4:6] == (['#0', '0'] if stages[0] == 'oral' else ['0', '#0'])
+    assert course.rating_table.ws.rows[4][4:6] == (['#', ''] if stages[0] == 'oral' else ['', '#'])
     assert report(api, merge_request_iid='42').status_code == 200
     assert course.rating_table.ws.rows[4][4:6] == first
-    assert report(api, request_type='approve', reported_by='assistant').json['review_status'] == '+'
+    assert report(api, request_type='accept', reported_by='assistant').json['review_status'] == '+'
     assert course.rating_table.ws.rows[4][4:6] == accepted
     course.rating_table._cache.set('__config__', course.config.model_dump())
     course.rating_table.update_cached_scores()
@@ -152,15 +157,15 @@ def test_task_pipeline_through_api_cache_and_summary(api, stages, first, accepte
     values = dict(zip(REVIEW_DETAILS_COLUMNS, summary.rows[1]))
     assert values['stage'] == stages[0]
     assert values['status'] == '+'
-    assert values[f'last_{stages[0]}_review_at']
-    other = 'written' if stages[0] == 'oral' else 'oral'
-    assert values[f'last_{other}_review_at'] == ''
+    assert values['last_oral_review_at' if stages[0] == 'oral' else 'last_codereview_at']
+    other = 'codereview' if stages[0] == 'oral' else 'oral'
+    assert values['last_oral_review_at' if other == 'oral' else 'last_codereview_at'] == ''
     # A neighboring task still uses its own default pipeline.
     assert report(api, task='other', merge_request_iid='43').status_code == 200
     assert course.rating_table.ws.rows[4][8:10] == ['?1', '0']
 
 
-@pytest.mark.parametrize('stage,forbidden', [('oral', 'changes_written'), ('written', 'changes_oral')])
+@pytest.mark.parametrize('stage,forbidden', [('oral', 'request_codereview'), ('codereview', 'request_oral')])
 def test_disabled_stage_api_error_has_no_writes(api, stage, forbidden):
     from manytask.review import ReviewStage
     api[1].deadlines.find_task('task')[1].review_stages = (ReviewStage(stage),)

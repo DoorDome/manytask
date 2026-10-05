@@ -14,6 +14,21 @@ def dates_row(table):
     return dict(zip(REVIEW_DETAILS_COLUMNS, table.ws.spreadsheet.worksheet('review_details').rows[1]))
 
 
+def test_legacy_summary_schema_is_migrated_without_losing_data(table):
+    submit(table, has_merge_request=True)
+    submit(table, E.REQUEST_CODEREVIEW)
+    details = table.ws.spreadsheet.worksheet('review_details')
+    before = deepcopy(details.rows)
+    details.rows[0] = [name.replace('codereview_attempts', 'written_attempts')
+                      .replace('last_codereview_at', 'last_written_review_at') for name in details.rows[0]]
+    details.rows[1][9] = 'codereview'
+    ReviewDetailsSheet(table.ws.spreadsheet)
+    assert details.rows == before
+    table.ws.spreadsheet.batch_update.reset_mock()
+    ReviewDetailsSheet(table.ws.spreadsheet)
+    table.ws.spreadsheet.batch_update.assert_not_called()
+
+
 def store_at(table, event, at):
     return table.store_score(student(), 'task', lambda _: 10, event,
                              oral_attempt_limit=3, group_name='group', at=at, has_merge_request=True)
@@ -21,16 +36,18 @@ def store_at(table, event, at):
 
 def test_dates_follow_completed_stage_and_submission_time(table):
     submit(table)  # first successful submission precedes the MR
+    assert dates_row(table)['oral_attempts'] == ''
+    assert dates_row(table)['codereview_attempts'] == ''
     assert dates_row(table)['first_successful_submission_at'] == NOW.isoformat(sep=' ')
     later = NOW + timedelta(hours=1)
     store_at(table, E.TESTS_PASSED, later)
-    store_at(table, E.CHANGES_WRITTEN, later + timedelta(minutes=1))
+    store_at(table, E.REQUEST_CODEREVIEW, later + timedelta(minutes=1))
     assert dates_row(table)['last_oral_review_at'] == (later + timedelta(minutes=1)).isoformat(sep=' ')
-    assert dates_row(table)['last_written_review_at'] == ''
+    assert dates_row(table)['last_codereview_at'] == ''
     store_at(table, E.TESTS_PASSED, later + timedelta(minutes=2))
     store_at(table, E.ACCEPT, later + timedelta(minutes=3))
     saved = dates_row(table)
-    assert saved['last_written_review_at'] == (later + timedelta(minutes=3)).isoformat(sep=' ')
+    assert saved['last_codereview_at'] == (later + timedelta(minutes=3)).isoformat(sep=' ')
     assert saved['first_successful_submission_at'] == NOW.isoformat(sep=' ')
     store_at(table, E.TESTS_PASSED, NOW - timedelta(days=1))
     assert dates_row(table)['first_successful_submission_at'] == saved['first_successful_submission_at']
@@ -44,10 +61,11 @@ def test_stale_summary_never_controls_transition(table):
     details = table.ws.spreadsheet.worksheet('review_details')
     for index in [3, 5, 9, 10]:
         details.rows[1][index] = 'corrupt'
-    assert submit(table, E.CHANGES_WRITTEN).review == '-'
-    assert table.ws.rows[4][4:6] == ['1', '-0']
-    assert dates_row(table)['stage'] == 'written'
+    assert submit(table, E.REQUEST_CODEREVIEW).review == '-'
+    assert table.ws.rows[4][4:6] == ['1', '-1']
+    assert dates_row(table)['stage'] == 'codereview'
     assert dates_row(table)['oral_attempts'] == '1'
+    assert dates_row(table)['codereview_attempts'] == '1'
     assert dates_row(table)['last_oral_review_at'] == NOW.isoformat(sep=' ')
 
 
@@ -55,7 +73,7 @@ def test_missing_summary_does_not_reset_attempts(table):
     submit(table, has_merge_request=True)
     workbook = table.ws.spreadsheet
     del workbook.sheets['review_details']
-    assert submit(table, E.CHANGES_ORAL).review == '-'
+    assert submit(table, E.REQUEST_ORAL).review == '-'
     assert submit(table).review == '?'
     assert table.ws.rows[4][4:6] == ['?2', '0']
 
@@ -68,7 +86,7 @@ def test_main_write_precedes_separate_summary_write(table):
     assert batches[1].args[0]['requests'][0]['updateCells']['start']['sheetId'] != table.ws.id
 
 
-@pytest.mark.parametrize('event', [E.TESTS_FAILED, E.ACCEPT, E.CHANGES_ORAL])
+@pytest.mark.parametrize('event', [E.TESTS_FAILED, E.ACCEPT, E.REQUEST_ORAL])
 def test_no_summary_access_for_invalid_or_failed_event(table, event):
     workbook = table.ws.spreadsheet
     workbook.worksheet.reset_mock()
@@ -106,8 +124,8 @@ def test_summary_failure_does_not_fail_main_transition(table, failure, caplog):
                 raise RuntimeError('summary write failed')
             workbook._batch_update(body)
         workbook.batch_update.side_effect = fail_summary
-    assert submit(table, E.CHANGES_WRITTEN).review == '-'
-    assert table.ws.rows[4][4:6] == ['1', '-0']
+    assert submit(table, E.REQUEST_CODEREVIEW).review == '-'
+    assert table.ws.rows[4][4:6] == ['1', '-1']
     assert 'Cannot update review_details for alice/task' in caplog.text
 
 
