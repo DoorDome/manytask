@@ -54,9 +54,9 @@ class ReviewState:
         if self.status == ReviewStatus.FAILED:
             return f"f{oral}", f"f{codereview}"
         if self.status != ReviewStatus.EMPTY:
-            if self.stage == ReviewStage.ORAL  or self.status == ACCEPTED:
+            if self.stage == ReviewStage.ORAL or self.status == ReviewStatus.ACCEPTED:
                 oral = self.status.value + oral
-            elif self.stage == ReviewStage.CODEREVIEW or self.status == ACCEPTED:
+            if self.stage == ReviewStage.CODEREVIEW or self.status == ReviewStatus.ACCEPTED:
                 codereview = self.status.value + codereview
         return oral, codereview
 
@@ -74,10 +74,10 @@ class ReviewState:
 
         oral_marker, oral_count = parse(oral)
         codereview_marker, codereview_count = parse(codereview)
-        if (oral_marker, codereview_marker) in (("g", "o"), ("f", "f")):
-            stage, status = ReviewStage.ORAL, ReviewStatus.FAILED
-        elif oral_marker in ("+") and codereview_marker in ("+"):
-            stage, status = ReviewStage.ORAL, ReviewStatus("+")
+        if (oral_marker, codereview_marker) in (("f", "f"),):
+            stage, status = (ReviewStage.ORAL if oral_count > 0 else ReviewStage.CODEREVIEW), ReviewStatus.FAILED
+        elif oral_marker in ("+",) and codereview_marker in ("+",):
+            stage, status = (ReviewStage.ORAL if oral_count > 0 else ReviewStage.CODEREVIEW), ReviewStatus("+")
         elif oral_marker in ("#", "?", "-", "+") and not codereview_marker:
             stage, status = ReviewStage.ORAL, ReviewStatus(oral_marker)
         elif codereview_marker in ("#", "?", "-", "+") and not oral_marker:
