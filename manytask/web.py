@@ -11,7 +11,7 @@ from flask.typing import ResponseReturnValue
 
 from . import glab
 from .course import Course, get_current_time
-from .config import TaskReviewStatus
+from .review import ReviewStatus
 
 
 SESSION_VERSION = 1.5
@@ -33,10 +33,10 @@ def valid_session(user_session: flask.sessions.SessionMixin) -> bool:
     )
 
 
-def format_review_status(status: TaskReviewStatus) -> bool | None:
-    if status == TaskReviewStatus.ACCEPTED:
+def format_review_status(status: ReviewStatus) -> bool | None:
+    if status == ReviewStatus.ACCEPTED:
         return True
-    if status == TaskReviewStatus.REJECTED:
+    if status in (ReviewStatus.CHANGES_REQUESTED, ReviewStatus.FAILED):
         return False
     return None
 
@@ -74,7 +74,7 @@ def course_page() -> ResponseReturnValue:
 
     # get scores
     tasks_scores = rating_table.get_scores(student_username)
-    task_reviews = {name: format_review_status(value.status) for name, value in rating_table.get_reviews(student_username).items()}
+    task_reviews = {name: format_review_status(value) for name, value in rating_table.get_reviews(student_username).items()}
     task_merge_requests = dict()
     tasks_stats = rating_table.get_stats()
 
